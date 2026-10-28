@@ -13,7 +13,15 @@ rem                               softer on a high-DPI monitor)
 rem ---------------------------------------------------------------------------
 setlocal
 set "ROOT=%~dp0"
-set "GAME=file:///%ROOT:\=/%index.html"
+rem Works whether this file sits next to index.html or one folder down (desktop/).
+set "HTML=%ROOT%index.html"
+if not exist "%HTML%" for %%I in ("%ROOT%..\index.html") do set "HTML=%%~fI"
+if not exist "%HTML%" (
+  echo Could not find index.html next to this launcher.
+  pause
+  exit /b 1
+)
+set "GAME=file:///%HTML:\=/%"
 set "PROFILE=%LOCALAPPDATA%\NovaPachinko"
 
 set "FLAGS=--app="%GAME%" --user-data-dir="%PROFILE%" --window-size=1500,960 --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=CalculateNativeWinOcclusion --enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist"

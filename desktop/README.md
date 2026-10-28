@@ -34,9 +34,21 @@ or smooth mode above, not a rewrite.
 ## Making it feel like an installed app
 
 1. Right-click `NovaPachinko.cmd` → **Send to → Desktop (create shortcut)**.
-2. Right-click the shortcut → **Properties → Change Icon** and pick
-   `icon-512.png` from the project folder.
+2. Right-click the shortcut → **Properties → Change Icon** and pick `icon.ico`
+   from the project folder (a multi-size icon built from the app artwork).
 3. Optional: **Properties → Run → Minimized** hides the console flash.
+4. To get the smooth mode as a second icon, copy the shortcut and add a space
+   plus `smooth` at the end of its **Target** field.
+
+The launcher finds `index.html` whether it sits beside it or one folder up, so a
+copy in the project root works the same way.
+
+## Saves
+
+The launcher uses its own Chrome profile in `%LOCALAPPDATA%\NovaPachinko`, which
+means the desktop app keeps **its own** tokens and collection — separate from the
+hosted page in your normal browser. Progress is stored with `localStorage`, which
+Chrome does keep for `file://` pages when the profile persists.
 
 The same game is also installable from the hosted build
 (<https://appleknife.github.io/nova-pachinko/>) via the browser's **Install app**
