@@ -1,0 +1,21 @@
+{
+  "name": "Nova Pachinko",
+  "short_name": "Nova Pachinko",
+  "description": "A neon physics pachinko cabinet with a token prize wheel and an 80-item vault collection.",
+  "id": "/nova-pachinko/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050811",
+  "theme_color": "#050811",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

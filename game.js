@@ -1,0 +1,3128 @@
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const ui = {
+    score: document.getElementById("score"),
+    best: document.getElementById("best"),
+    balls: document.getElementById("balls"),
+    dropNumber: document.getElementById("dropNumber"),
+    chainMult: document.getElementById("chainMult"),
+    chainFill: document.getElementById("chainFill"),
+    chainHits: document.getElementById("chainHits"),
+    chainRule: document.getElementById("chainRule"),
+    runBallRule: document.getElementById("runBallRule"),
+    luckyCard: document.getElementById("luckyCard"),
+    luckyText: document.getElementById("luckyText"),
+    dropBtn: document.getElementById("dropBtn"),
+    autoBtn: document.getElementById("autoBtn"),
+    aimHint: document.getElementById("aimHint"),
+    resetBtn: document.getElementById("resetBtn"),
+    soundBtn: document.getElementById("soundBtn"),
+    gameOver: document.getElementById("gameOver"),
+    finalTitle: document.getElementById("finalTitle"),
+    finalScore: document.getElementById("finalScore"),
+    finalBest: document.getElementById("finalBest"),
+    newBest: document.getElementById("newBest"),
+    againBtn: document.getElementById("againBtn"),
+    overlayVaultBtn: document.getElementById("overlayVaultBtn"),
+    runJackpots: document.getElementById("runJackpots"),
+    runTokens: document.getElementById("runTokens"),
+    runChain: document.getElementById("runChain"),
+    reportVault: document.getElementById("reportVault"),
+    reportVaultFill: document.getElementById("reportVaultFill"),
+    reportNext: document.getElementById("reportNext"),
+    announcer: document.getElementById("announcer")
+  };
+
+  const W = 760;
+  const H = 1060;
+  const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const FRAME = { x: 10, y: 10, w: 740, h: 1040, r: 38 };
+  const GLASS = { x: 32, y: 76, w: 696, h: 950, r: 27 };
+  const PLAY = { left: 58, right: 702, top: 136, bottom: 1014 };
+  const SLOT_TOP = 900;
+  const SLOT_BOTTOM = 1014;
+  const GRAVITY = 1850;
+  const STEP = 1 / 240;
+  const BALL_R = 8.6;
+  const MAX_SPEED = 1680;
+  const DIVIDER_R = 4.2;
+  const STARTING_BALLS = 12;
+  const AUTO_DROP_KEY = "nova-pachinko-auto-v1";
+  const AUTO_DROP_MS = 190;
+  const AUTO_SWEEP_SECONDS = 2.3;
+  const DEFAULT_BONUSES = {
+    startingBalls: 0,
+    chainStep: 5,
+    goldPinChain: 2,
+    luckyEvery: 5,
+    scoreMult: 1,
+    bonusBallExtra: 0,
+    bonusSlotScoreMult: 1,
+    tokenBonus: 0
+  };
+  let loadoutBonuses = { ...DEFAULT_BONUSES };
+  let bonuses = { ...DEFAULT_BONUSES };
+
+  const C = {
+    ink: "#fff3dc",
+    cream: "#dcd1e7",
+    muted: "#777fa8",
+    cyan: "#4df5dd",
+    coral: "#ff6677",
+    gold: "#ffc75f",
+    violet: "#ad86ff",
+    glassA: "#080d1b",
+    glassB: "#101934",
+    frameA: "#20213d",
+    frameB: "#080b17"
+  };
+
+  const SLOT_DEFS = [
+    { w: 98, value: 100, label: "100", sub: "PTS", color: "#56d9ff" },
+    { w: 96, value: 150, label: "+1", sub: "BALL", color: "#ad86ff", bonus: 1 },
+    { w: 94, value: 500, label: "500", sub: "PTS", color: "#ff7180" },
+    { w: 68, value: 2500, label: "2500", sub: "JACKPOT", color: "#ffc75f", jackpot: true },
+    { w: 94, value: 500, label: "500", sub: "PTS", color: "#ff7180" },
+    { w: 96, value: 150, label: "+1", sub: "BALL", color: "#ad86ff", bonus: 1 },
+    { w: 98, value: 100, label: "100", sub: "PTS", color: "#56d9ff" }
+  ];
+
+  const slots = [];
+  {
+    let x = PLAY.left;
+    for (let i = 0; i < SLOT_DEFS.length; i++) {
+      const def = SLOT_DEFS[i];
+      slots.push({
+        ...def,
+        x,
+        index: i,
+        center: x + def.w / 2,
+        flash: 0
+      });
+      x += def.w;
+    }
+  }
+
+  const slotDividers = slots.slice(1).map((slot) => ({
+    x: slot.x,
+    y1: SLOT_TOP - 6,
+    y2: SLOT_BOTTOM
+  }));
+  const JACKPOT_SLOT = slots.find((slot) => slot.jackpot);
+
+  const pins = buildPins();
+  const stars = buildStars();
+
+  const state = {
+    status: "ready",
+    started: false,
+    runStats: { jackpots: 0, tokensEarned: 0, bestChain: 0 },
+    score: 0,
+    best: loadNumber("nova-pachinko-best-v1", 0),
+    runBestStart: 0,
+    ballsLeft: STARTING_BALLS,
+    dropCount: 0,
+    activeBalls: [],
+    particles: [],
+    floats: [],
+    aimX: W / 2,
+    lastDropAt: -9999,
+    lastPinSound: 0,
+    time: 0,
+    slowMo: 0,
+    tensionBall: null,
+    shake: 0,
+    flash: 0,
+    flashColor: C.gold,
+    overTimer: 0,
+    auto: loadBoolean(AUTO_DROP_KEY, false),
+    autoTimer: 0,
+    autoPhase: 0,
+    muted: loadBoolean("nova-pachinko-muted-v1", false)
+  };
+  state.runBestStart = state.best;
+
+  let audioCtx = null;
+  let audioBus = null;
+  let noiseBuffer = null;
+  let roomBed = null;
+  let roomChimeTimer = 0;
+  let tensionVoice = null;
+  let tensionTimer = 0;
+  let backingScale = 0;
+  let lastFrame = performance.now();
+  let accumulator = 0;
+  let chainFillWidth = "";
+  let scoreBumpTimer = 0;
+
+  bindEvents();
+  fitBacking();
+  updateSoundButton();
+  updateAutoButton();
+  updateHud(true);
+  requestAnimationFrame(frame);
+
+  function buildPins() {
+    const base = [];
+    for (let row = 0; row < 10; row++) {
+      const y = 232 + row * 57;
+      const count = row % 2 === 0 ? 10 : 9;
+      const startX = row % 2 === 0 ? 119 : 148;
+      for (let i = 0; i < count; i++) {
+        base.push({ x: startX + i * 58, y, r: 5.4, gold: false });
+      }
+    }
+
+    const specials = [
+      { x: 300, y: 401, r: 12.5, gold: true },
+      { x: 460, y: 515, r: 12.5, gold: true },
+      { x: 380, y: 686, r: 13, gold: true },
+      { x: 380, y: 835, r: 11.5, gold: true },
+      { x: 248, y: 790, r: 8.5, gold: false },
+      { x: 512, y: 790, r: 8.5, gold: false }
+    ];
+
+    const filtered = base.filter((pin) => {
+      return specials.every((special) => {
+        const dx = pin.x - special.x;
+        const dy = pin.y - special.y;
+        return Math.hypot(dx, dy) > special.r + pin.r + 12;
+      });
+    });
+
+    return filtered.concat(specials).map((pin, id) => ({
+      ...pin,
+      id,
+      flash: 0
+    }));
+  }
+
+  function buildStars() {
+    const result = [];
+    let seed = 0x4e4f5641;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    for (let i = 0; i < 64; i++) {
+      result.push({
+        x: 48 + random() * 664,
+        y: 86 + random() * 922,
+        r: 0.35 + random() * 1.1,
+        a: 0.06 + random() * 0.18,
+        twinkle: random() * Math.PI * 2,
+        speed: 0.4 + random() * 1.3
+      });
+    }
+    return result;
+  }
+
+  function bindEvents() {
+    window.addEventListener("resize", fitBacking);
+
+    window.addEventListener("keydown", (event) => {
+      if (window.NovaWheel && window.NovaWheel.isOpen()) {
+        if (!event.repeat && event.key.toLowerCase() === "m") {
+          event.preventDefault();
+          toggleSound();
+        }
+        return;
+      }
+
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (event.code === "Space") {
+        const target = event.target;
+        if (target instanceof Element && target.closest("button")) return;
+        event.preventDefault();
+        dropBall();
+      } else if (key === "r") {
+        event.preventDefault();
+        resetGame();
+      } else if (key === "m") {
+        event.preventDefault();
+        toggleSound();
+      } else if (key === "a") {
+        event.preventDefault();
+        setAuto(!state.auto);
+      }
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      // Auto drop owns the aim while it sweeps; the pointer would fight it.
+      if (state.auto) return;
+      const point = boardPoint(event);
+      setAimFromPoint(point);
+    });
+
+    canvas.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      event.preventDefault();
+      const point = boardPoint(event);
+      setAimFromPoint(point);
+      ensureAudio();
+      dropBall();
+    });
+
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
+    ui.dropBtn.addEventListener("click", () => {
+      ensureAudio();
+      dropBall();
+      ui.dropBtn.blur();
+    });
+
+    ui.autoBtn.addEventListener("click", () => {
+      setAuto(!state.auto);
+      ui.autoBtn.blur();
+    });
+
+    ui.resetBtn.addEventListener("click", () => {
+      resetGame();
+      ui.resetBtn.blur();
+    });
+
+    ui.againBtn.addEventListener("click", () => {
+      resetGame();
+      ui.againBtn.blur();
+    });
+
+    ui.overlayVaultBtn.addEventListener("click", () => {
+      if (window.NovaWheel) window.NovaWheel.open();
+    });
+
+    ui.soundBtn.addEventListener("click", () => {
+      toggleSound();
+      ui.soundBtn.blur();
+    });
+
+    window.addEventListener("nova:sfx", (event) => {
+      handleNovaSfx(event.detail);
+    });
+
+    window.addEventListener("nova:collectionchange", (event) => {
+      if (ui.gameOver.classList.contains("show")) {
+        updateVaultReport(event.detail);
+      }
+    });
+
+    window.addEventListener("nova:loadoutchange", (event) => {
+      applyLoadoutBonuses(event.detail);
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        lastFrame = performance.now();
+        accumulator = 0;
+      }
+    });
+  }
+
+  function boardPoint(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * W,
+      y: ((event.clientY - rect.top) / rect.height) * H
+    };
+  }
+
+  function setAimFromPoint(point) {
+    if (state.status === "over") return;
+    const margin = BALL_R + 10;
+    state.aimX = clamp(point.x, PLAY.left + margin, PLAY.right - margin);
+  }
+
+  function fitBacking() {
+    const dpr = clamp(window.devicePixelRatio || 1, 1, 2.25);
+    if (Math.abs(dpr - backingScale) > 0.001) {
+      backingScale = dpr;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+    }
+    ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+  }
+
+  function frame(now) {
+    if (window.NovaWheel && window.NovaWheel.isOpen()) {
+      lastFrame = now;
+      accumulator = 0;
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    const dt = clamp((now - lastFrame) / 1000, 0, 0.05);
+    const slowMotion = state.slowMo > 0;
+    const timeScale = slowMotion ? 0.34 : 1;
+
+    lastFrame = now;
+    accumulator += dt * timeScale;
+
+    let steps = 0;
+    while (accumulator >= STEP && steps < 14) {
+      stepPhysics(STEP);
+      accumulator -= STEP;
+      steps++;
+    }
+    if (steps === 14) accumulator = 0;
+
+    updateEffects(dt * (slowMotion ? 0.55 : 1));
+    updateAutoAim(dt);
+    if (slowMotion) state.slowMo = Math.max(0, state.slowMo - dt);
+    updateHud(false);
+    render(dt);
+    requestAnimationFrame(frame);
+  }
+
+  function stepPhysics(dt) {
+    const balls = state.activeBalls;
+
+    for (let i = 0; i < balls.length; i++) {
+      const ball = balls[i];
+      ball.age += dt;
+
+      if (ball.captured) {
+        ball.captureAge += dt;
+        ball.vy += GRAVITY * 0.8 * dt;
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+        ball.alpha = clamp(1 - Math.max(0, ball.captureAge - 0.16) * 1.8, 0, 1);
+        continue;
+      }
+
+      ball.vy += GRAVITY * dt;
+      ball.vx *= 1 - 0.045 * dt;
+      ball.vy *= 1 - 0.018 * dt;
+
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+
+      ball.trail.push({ x: ball.x, y: ball.y });
+      if (ball.trail.length > 27) ball.trail.shift();
+
+      const speed = Math.hypot(ball.vx, ball.vy);
+      if (speed > MAX_SPEED) {
+        const scale = MAX_SPEED / speed;
+        ball.vx *= scale;
+        ball.vy *= scale;
+      }
+
+      if (ball.x - ball.r < PLAY.left) {
+        ball.x = PLAY.left + ball.r;
+        if (ball.vx < 0) ball.vx = -ball.vx * 0.5;
+      } else if (ball.x + ball.r > PLAY.right) {
+        ball.x = PLAY.right - ball.r;
+        if (ball.vx > 0) ball.vx = -ball.vx * 0.5;
+      }
+
+      if (ball.y - ball.r < PLAY.top) {
+        ball.y = PLAY.top + ball.r;
+        if (ball.vy < 0) ball.vy = -ball.vy * 0.22;
+      }
+
+      for (let p = 0; p < pins.length; p++) {
+        resolvePin(ball, pins[p]);
+      }
+
+      for (let d = 0; d < slotDividers.length; d++) {
+        const divider = slotDividers[d];
+        resolveCapsule(
+          ball,
+          divider.x,
+          divider.y1,
+          divider.x,
+          divider.y2,
+          DIVIDER_R,
+          0.42
+        );
+      }
+
+      if (
+        !ball.captured &&
+        !ball.jackpotTension &&
+        ball.vy > 35 &&
+        ball.y > SLOT_TOP - 44 &&
+        ball.y < SLOT_TOP + 24 &&
+        ball.x > JACKPOT_SLOT.x + 8 &&
+        ball.x < JACKPOT_SLOT.x + JACKPOT_SLOT.w - 8
+      ) {
+        ball.jackpotTension = true;
+        if (!REDUCED_MOTION) {
+          state.slowMo = Math.max(state.slowMo, 0.95);
+          state.tensionBall = ball;
+        }
+        sfxTension();
+        haptic(14);
+      }
+
+      if (ball.y > SLOT_TOP + 51) {
+        const slot = slotAt(ball.x);
+        if (slot) captureBall(ball, slot);
+      } else if (ball.y + ball.r > PLAY.bottom) {
+        ball.y = PLAY.bottom - ball.r;
+        if (ball.vy > 0) ball.vy = -ball.vy * 0.2;
+      }
+
+      const currentSpeed = Math.hypot(ball.vx, ball.vy);
+      if (ball.y < SLOT_TOP - 20 && currentSpeed < 24) {
+        ball.slowTime += dt;
+        if (ball.slowTime > 1.05) {
+          ball.vx += (Math.random() < 0.5 ? -1 : 1) * (58 + Math.random() * 72);
+          ball.vy -= 52 + Math.random() * 48;
+          ball.slowTime = 0;
+        }
+      } else {
+        ball.slowTime = Math.max(0, ball.slowTime - dt * 2);
+      }
+
+      if (ball.age > 32 && !ball.captured) {
+        ball.vy += 180 * dt;
+      }
+    }
+
+    resolveBallPairs();
+
+    state.activeBalls = balls.filter((ball) => {
+      if (!ball.captured) return true;
+      return ball.alpha > 0.02 && ball.captureAge < 1.25 && ball.y < PLAY.bottom + 30;
+    });
+
+    if (
+      state.started &&
+      state.status === "playing" &&
+      state.ballsLeft <= 0 &&
+      state.activeBalls.length === 0
+    ) {
+      endRun();
+    }
+  }
+
+  function resolvePin(ball, pin) {
+    const dx = ball.x - pin.x;
+    const dy = ball.y - pin.y;
+    const minDist = ball.r + pin.r;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq >= minDist * minDist) return;
+
+    const dist = Math.sqrt(distSq) || 0.0001;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const overlap = minDist - dist + 0.02;
+
+    ball.x += nx * overlap;
+    ball.y += ny * overlap;
+
+    const normalSpeed = ball.vx * nx + ball.vy * ny;
+    if (normalSpeed >= 0) return;
+
+    const impact = -normalSpeed;
+    const restitution = pin.gold ? 0.7 : 0.59;
+    const impulse = -(1 + restitution) * normalSpeed;
+
+    ball.vx += nx * impulse;
+    ball.vy += ny * impulse;
+
+    const tx = -ny;
+    const ty = nx;
+    const tangentSpeed = ball.vx * tx + ball.vy * ty;
+    const tangentLoss = pin.gold ? 0.07 : 0.045;
+    ball.vx -= tx * tangentSpeed * tangentLoss;
+    ball.vy -= ty * tangentSpeed * tangentLoss;
+
+    ball.vx += (Math.random() - 0.5) * 14;
+    ball.vy += (Math.random() - 0.5) * 4;
+    ball.slowTime = 0;
+
+    if (impact > 26) {
+      pin.flash = Math.max(pin.flash, clamp(impact / 430, 0.18, 1));
+      registerPinHit(ball, pin, impact);
+    }
+  }
+
+  function resolveCapsule(ball, x1, y1, x2, y2, capsuleRadius, restitution) {
+    const abx = x2 - x1;
+    const aby = y2 - y1;
+    const lengthSq = abx * abx + aby * aby;
+    let nearestX = x1;
+    let nearestY = y1;
+
+    if (lengthSq > 0) {
+      const t = clamp(((ball.x - x1) * abx + (ball.y - y1) * aby) / lengthSq, 0, 1);
+      nearestX = x1 + abx * t;
+      nearestY = y1 + aby * t;
+    }
+
+    const dx = ball.x - nearestX;
+    const dy = ball.y - nearestY;
+    const minDist = ball.r + capsuleRadius;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq >= minDist * minDist) return;
+
+    const dist = Math.sqrt(distSq) || 0.0001;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const overlap = minDist - dist + 0.03;
+
+    ball.x += nx * overlap;
+    ball.y += ny * overlap;
+
+    const normalSpeed = ball.vx * nx + ball.vy * ny;
+    if (normalSpeed >= 0) return;
+
+    const impulse = -(1 + restitution) * normalSpeed;
+    ball.vx += nx * impulse;
+    ball.vy += ny * impulse;
+    ball.vx += (Math.random() - 0.5) * 3;
+    ball.slowTime = 0;
+  }
+
+  function resolveBallPairs() {
+    const balls = state.activeBalls;
+    for (let i = 0; i < balls.length; i++) {
+      const a = balls[i];
+      if (a.captured) continue;
+      for (let j = i + 1; j < balls.length; j++) {
+        const b = balls[j];
+        if (b.captured) continue;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const minDist = a.r + b.r;
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= minDist * minDist) continue;
+
+        const dist = Math.sqrt(distSq) || 0.0001;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const overlap = minDist - dist;
+        const correction = overlap * 0.5;
+
+        a.x -= nx * correction;
+        a.y -= ny * correction;
+        b.x += nx * correction;
+        b.y += ny * correction;
+
+        const relativeNormal =
+          (b.vx - a.vx) * nx +
+          (b.vy - a.vy) * ny;
+
+        if (relativeNormal >= 0) continue;
+
+        const impulse = (-(1 + 0.66) * relativeNormal) / 2;
+        a.vx -= impulse * nx;
+        a.vy -= impulse * ny;
+        b.vx += impulse * nx;
+        b.vy += impulse * ny;
+      }
+    }
+  }
+
+  function registerPinHit(ball, pin, impact) {
+    const now = performance.now();
+
+    if (!ball.hitPegs.has(pin.id)) {
+      const previousHits = ball.chainHits;
+      ball.hitPegs.add(pin.id);
+      ball.chainHits += pin.gold ? bonuses.goldPinChain : 1;
+      state.runStats.bestChain = Math.max(state.runStats.bestChain, ball.chainHits);
+
+      const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+      const previousMultiplier = Math.min(5, 1 + Math.floor(previousHits / chainStep));
+      const nextMultiplier = Math.min(5, 1 + Math.floor(ball.chainHits / chainStep));
+      if (nextMultiplier > previousMultiplier) {
+        addFloatingText(
+          ball.x,
+          ball.y - 20,
+          `CHAIN ×${nextMultiplier}`,
+          nextMultiplier >= 4 ? C.gold : C.violet,
+          11,
+          0.8
+        );
+        sfxChainUp(nextMultiplier);
+        pulseChainHud();
+        haptic(8);
+      }
+
+      if (pin.gold) {
+        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.5 : 2.1);
+        spawnSparks(pin.x, pin.y, C.gold, 5, 1.25);
+        sfxGoldPin();
+      }
+    }
+
+    if (impact > 52 && now - state.lastPinSound > 34) {
+      state.lastPinSound = now;
+      sfxPin(pin.x, impact, ball.chainHits, ball);
+    }
+
+    if (impact > 95 && Math.random() < 0.38 && state.particles.length < 260) {
+      spawnSparks(
+        ball.x,
+        ball.y,
+        pin.gold ? C.gold : C.cyan,
+        2,
+        clamp(impact / 500, 0.45, 1)
+      );
+    }
+  }
+
+  function pulseChainHud() {
+    const panel = ui.chainMult.closest(".chain-panel");
+    if (!panel) return;
+    panel.classList.remove("chain-pulse");
+    void panel.offsetWidth;
+    panel.classList.add("chain-pulse");
+    window.setTimeout(() => panel.classList.remove("chain-pulse"), 420);
+  }
+
+  function slotAt(x) {
+    for (let i = 0; i < slots.length; i++) {
+      const slot = slots[i];
+      if (x >= slot.x && x < slot.x + slot.w) return slot;
+    }
+    return null;
+  }
+
+  function captureBall(ball, slot) {
+    if (ball.captured) return;
+
+    ball.captured = true;
+    ball.captureAge = 0;
+    ball.vx *= 0.22;
+    ball.vy = Math.max(ball.vy, 190);
+    slot.flash = 1;
+    state.slowMo = 0;
+    state.tensionBall = null;
+
+    const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+    const chainMultiplier = Math.min(5, 1 + Math.floor(ball.chainHits / chainStep));
+    const luckyMultiplier = ball.gold ? 2 : 1;
+    const multiplier = chainMultiplier * luckyMultiplier;
+    let points = slot.value * multiplier * bonuses.scoreMult;
+    if (slot.bonus) points *= bonuses.bonusSlotScoreMult;
+    points = Math.max(1, Math.round(points));
+
+    addScore(points);
+
+    if (slot.bonus) {
+      const ballsWon = slot.bonus + bonuses.bonusBallExtra;
+      state.ballsLeft += ballsWon;
+      bumpElement(ui.balls.parentElement, "bump", 340);
+      spawnSparks(slot.center, SLOT_TOP + 20, slot.color, 12, 0.9);
+      // Bonus balls are new ammo: keep an auto-drop run honest instead of stalling.
+      if (state.auto) scheduleAutoDrop(600);
+    }
+
+    addFloatingText(
+      slot.center,
+      SLOT_TOP - 18 - Math.random() * 5,
+      `+${formatScore(points)}`,
+      ball.gold ? C.gold : slot.color,
+      slot.jackpot ? 30 : 23,
+      1.45
+    );
+
+    if (multiplier > 1) {
+      addFloatingText(
+        slot.center,
+        SLOT_TOP + 9,
+        `×${multiplier}${ball.gold ? " LUCKY" : " CHAIN"}`,
+        multiplier >= 6 ? C.gold : C.violet,
+        10,
+        1.25
+      );
+    }
+
+    if (slot.bonus) {
+      const ballsWon = slot.bonus + bonuses.bonusBallExtra;
+      addFloatingText(
+        slot.center,
+        SLOT_TOP + 28,
+        `+${ballsWon} BALL${ballsWon === 1 ? "" : "S"}`,
+        C.violet,
+        11,
+        1.35
+      );
+    }
+
+    if (slot.jackpot) {
+      state.shake = Math.max(state.shake, REDUCED_MOTION ? 1.5 : 7);
+      state.flash = REDUCED_MOTION ? 0.12 : 0.34;
+      state.flashColor = C.gold;
+      const tokensWon = 1 + bonuses.tokenBonus;
+      state.runStats.jackpots += 1;
+      state.runStats.tokensEarned += tokensWon;
+      spawnConfetti(slot.center, SLOT_TOP + 8);
+      sfxJackpot();
+      if (window.NovaWheel) window.NovaWheel.awardToken(tokensWon, "jackpot");
+      flyTokenToHud(slot);
+      haptic([0, 28, 36, 70]);
+    } else if (slot.bonus) {
+      state.shake = Math.max(state.shake, 2.4);
+      state.flash = 0.08;
+      state.flashColor = C.violet;
+      sfxBonus();
+    } else {
+      state.flash = Math.max(state.flash, 0.06);
+      state.flashColor = slot.color;
+      sfxPocket(slot.value);
+    }
+
+    spawnSparks(
+      slot.center,
+      SLOT_TOP + 24,
+      slot.jackpot ? C.gold : slot.color,
+      slot.jackpot ? 34 : 12,
+      slot.jackpot ? 1.8 : 0.9
+    );
+
+    const announcement = `${slot.jackpot ? `Jackpot! ${1 + bonuses.tokenBonus} Nova Token${bonuses.tokenBonus > 0 ? "s" : ""} earned. ` : ""}Ball landed in ${slot.label} for ${formatScore(points)} points. ${state.ballsLeft} ball${state.ballsLeft === 1 ? "" : "s"} left.`;
+    ui.announcer.textContent = announcement;
+
+    updateHud(true);
+  }
+
+  function addScore(points) {
+    if (points <= 0) return;
+    state.score += points;
+    if (state.score > state.best) {
+      state.best = state.score;
+      saveNumber("nova-pachinko-best-v1", state.best);
+    }
+    bumpElement(ui.score, "bump", 180);
+  }
+
+  function bumpElement(element, className, duration) {
+    if (!element) return;
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+    window.clearTimeout(className === "bump" && element === ui.score ? scoreBumpTimer : 0);
+    const timeout = window.setTimeout(() => element.classList.remove(className), duration);
+    if (element === ui.score) scoreBumpTimer = timeout;
+  }
+
+  function dropBall() {
+    if (window.NovaWheel && window.NovaWheel.isOpen()) return;
+    if (state.status === "over" || state.status === "ending") return;
+    if (state.ballsLeft <= 0) return;
+
+    const now = performance.now();
+    if (now - state.lastDropAt < 105) return;
+    state.lastDropAt = now;
+
+    const nextDropNumber = state.dropCount + 1;
+    const luckyEvery = Math.max(2, Math.floor(bonuses.luckyEvery) || 5);
+    const gold = nextDropNumber % luckyEvery === 0;
+    const margin = BALL_R + 12;
+    const spawnX = clamp(state.aimX, PLAY.left + margin, PLAY.right - margin);
+    const spawnY = PLAY.top + 27;
+
+    const ball = {
+      x: spawnX,
+      y: spawnY,
+      vx: (Math.random() - 0.5) * 28,
+      vy: 26,
+      r: BALL_R,
+      gold,
+      voice: Math.floor(Math.random() * 3),
+      age: 0,
+      slowTime: 0,
+      captured: false,
+      captureAge: 0,
+      alpha: 1,
+      jackpotTension: false,
+      chainHits: 0,
+      hitPegs: new Set(),
+      trail: []
+    };
+
+    state.ballsLeft--;
+    state.dropCount++;
+    state.activeBalls.push(ball);
+    state.status = "playing";
+    state.started = true;
+
+    bumpElement(ui.balls.parentElement, "bump", 300);
+    ensureAudio();
+    sfxDrop(gold);
+
+    if (gold) {
+      spawnSparks(spawnX, spawnY, C.gold, 12, 1.15);
+      state.shake = Math.max(state.shake, 1.2);
+    }
+
+    updateHud(true);
+    if (state.auto) scheduleAutoDrop();
+  }
+
+  function updateAutoButton() {
+    if (!ui.autoBtn) return;
+    const label = ui.autoBtn.querySelector("span");
+    ui.autoBtn.classList.toggle("active", state.auto);
+    ui.autoBtn.setAttribute("aria-pressed", String(state.auto));
+    if (label) label.textContent = state.auto ? "ON" : "AUTO";
+    if (ui.aimHint) {
+      ui.aimHint.innerHTML = state.auto
+        ? "Auto drop <span>·</span> sweeping the board"
+        : "Move to aim <span>·</span> click the board to drop";
+    }
+    ui.autoBtn.title = state.auto
+      ? "Auto drop is on — click to stop (A)"
+      : "Auto drop every ball (A)";
+    ui.autoBtn.setAttribute(
+      "aria-label",
+      state.auto
+        ? "Auto drop is on. Stop dropping balls automatically."
+        : "Auto drop every ball."
+    );
+  }
+
+  function clearAutoTimer() {
+    window.clearTimeout(state.autoTimer);
+    state.autoTimer = 0;
+  }
+
+  // Auto drop aims for you: the chute glides across the board so a burst of
+  // balls spreads over every slot instead of stacking in one lane.
+  function updateAutoAim(dt) {
+    if (!state.auto || state.ballsLeft <= 0) return;
+    if (state.status === "over") return;
+
+    state.autoPhase = (state.autoPhase + dt * ((Math.PI * 2) / AUTO_SWEEP_SECONDS)) % (Math.PI * 2);
+    // A triangle wave instead of a sine: constant speed, no lingering at the
+    // edges, so lanes get an even share of the burst.
+    const progress = state.autoPhase / (Math.PI * 2);
+    const triangle = 4 * Math.abs(progress - 0.5) - 1;
+    const margin = BALL_R + 18;
+    const center = (PLAY.left + PLAY.right) / 2;
+    const half = Math.max(0, (PLAY.right - margin - (PLAY.left + margin)) / 2);
+    state.aimX = center + triangle * half * 0.86;
+  }
+
+  function scheduleAutoDrop(delay = AUTO_DROP_MS) {
+    clearAutoTimer();
+    if (!state.auto || state.ballsLeft <= 0) return;
+    state.autoTimer = window.setTimeout(autoDropTick, delay);
+  }
+
+  function autoDropTick() {
+    state.autoTimer = 0;
+    if (!state.auto || state.ballsLeft <= 0) return;
+
+    // The wheel overlay pauses the board; wait it out instead of losing the queue.
+    if (window.NovaWheel && window.NovaWheel.isOpen()) {
+      scheduleAutoDrop(300);
+      return;
+    }
+
+    if (state.status === "over" || state.status === "ending") return;
+
+    dropBall();
+    scheduleAutoDrop();
+  }
+
+  function setAuto(on) {
+    state.auto = Boolean(on);
+    saveBoolean(AUTO_DROP_KEY, state.auto);
+    updateAutoButton();
+    ui.announcer.textContent = state.auto
+      ? "Auto drop on. Every ball will drop automatically."
+      : "Auto drop off.";
+
+    if (!state.auto) {
+      clearAutoTimer();
+      return;
+    }
+
+    ensureAudio();
+    // Begin the sweep from the middle of the board so the first ball cannot
+    // inherit wherever the pointer happened to be sitting.
+    state.autoPhase = Math.PI / 2;
+    updateAutoAim(0);
+    if (state.status === "over" || state.status === "ending") {
+      resetGame();
+      return;
+    }
+    if (state.status === "ready" || (state.status === "playing" && state.ballsLeft > 0)) {
+      dropBall();
+      scheduleAutoDrop();
+    }
+  }
+
+  function endRun() {
+    if (state.status !== "playing") return;
+    state.status = "ending";
+    updateHud(true);
+
+    window.clearTimeout(state.overTimer);
+    state.overTimer = window.setTimeout(() => {
+      if (state.ballsLeft > 0 || state.activeBalls.length > 0) {
+        if (state.status !== "over") state.status = "playing";
+        updateHud(true);
+        return;
+      }
+
+      state.status = "over";
+      const isNewBest = state.score > state.runBestStart;
+      ui.finalTitle.textContent = isNewBest
+        ? "NEW HIGH SCORE"
+        : state.score >= 10000
+          ? "JACKPOT HUNTER"
+          : "NICE DROP";
+      ui.finalScore.textContent = formatScore(state.score);
+      ui.finalBest.textContent = formatScore(state.best);
+      ui.newBest.classList.toggle("show", isNewBest);
+      updateVaultReport();
+      ui.gameOver.classList.add("show");
+      ui.gameOver.setAttribute("aria-hidden", "false");
+      updateHud(true);
+      sfxRunOver();
+
+      window.setTimeout(() => {
+        if (state.status === "over") ui.againBtn.focus({ preventScroll: true });
+      }, 420);
+    }, 720);
+  }
+
+  function updateVaultReport(summary) {
+    if (ui.runJackpots) {
+      ui.runJackpots.textContent = String(state.runStats.jackpots);
+      ui.runTokens.textContent = String(state.runStats.tokensEarned);
+      const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+      const bestMultiplier = Math.min(
+        5,
+        1 + Math.floor(state.runStats.bestChain / chainStep)
+      );
+      ui.runChain.textContent = `×${bestMultiplier}`;
+      ui.runChain.title = `${state.runStats.bestChain} pin hits`;
+    }
+
+    const vault = summary || window.NovaWheel?.getVaultSummary?.();
+    if (!vault) {
+      if (ui.reportVault) ui.reportVault.textContent = "—";
+      if (ui.reportVaultFill) ui.reportVaultFill.style.width = "0%";
+      if (ui.reportNext) ui.reportNext.textContent = "VAULT OFFLINE";
+      if (ui.overlayVaultBtn) ui.overlayVaultBtn.textContent = "OPEN VAULT";
+      return;
+    }
+
+    if (ui.overlayVaultBtn) {
+      ui.overlayVaultBtn.textContent =
+        vault.tokens > 0
+          ? `SPEND ${vault.tokens} TOKEN${vault.tokens === 1 ? "" : "S"}`
+          : "VIEW VAULT";
+    }
+
+    if (ui.reportVault) {
+      ui.reportVault.textContent = `${vault.found}/${vault.total}`;
+    }
+    if (ui.reportVaultFill) {
+      ui.reportVaultFill.style.width = `${(vault.found / vault.total) * 100}%`;
+    }
+    if (ui.reportNext) {
+      if (vault.found === 0) {
+        ui.reportNext.textContent = "OPEN THE VAULT · YOUR FIRST RELIC AWAITS";
+      } else if (vault.nextBranch) {
+        const remaining = vault.nextBranch.total - vault.nextBranch.found;
+        ui.reportNext.textContent = `NEXT UNLOCK · ${remaining} MORE FOR ${vault.nextBranch.name.toUpperCase()}`;
+      } else {
+        ui.reportNext.textContent = `ALL ${vault.total} RELICS DISCOVERED`;
+      }
+    }
+  }
+
+  function applyLoadoutBonuses(next) {
+    loadoutBonuses = { ...DEFAULT_BONUSES, ...(next || {}) };
+    if (!state.started) {
+      bonuses = { ...loadoutBonuses };
+      state.ballsLeft = STARTING_BALLS + bonuses.startingBalls;
+      updateHud(true);
+    }
+  }
+
+  function syncBonusesFromWheel() {
+    const next = window.NovaWheel?.getBonuses?.();
+    if (next) loadoutBonuses = { ...DEFAULT_BONUSES, ...next };
+  }
+
+  function resetGame() {
+    window.clearTimeout(state.overTimer);
+    clearAutoTimer();
+    state.status = "ready";
+    state.started = false;
+    state.runStats = { jackpots: 0, tokensEarned: 0, bestChain: 0 };
+    state.score = 0;
+    state.runBestStart = state.best;
+    syncBonusesFromWheel();
+    bonuses = { ...loadoutBonuses };
+    state.ballsLeft = STARTING_BALLS + bonuses.startingBalls;
+    state.dropCount = 0;
+    state.activeBalls = [];
+    state.particles = [];
+    state.floats = [];
+    state.aimX = W / 2;
+    state.autoPhase = Math.PI / 2;
+    state.lastDropAt = -9999;
+    state.slowMo = 0;
+    state.tensionBall = null;
+    state.shake = 0;
+    state.flash = 0;
+    state.overTimer = 0;
+
+    for (const pin of pins) pin.flash = 0;
+    for (const slot of slots) slot.flash = 0;
+
+    ui.gameOver.classList.remove("show");
+    ui.gameOver.setAttribute("aria-hidden", "true");
+    ui.newBest.classList.remove("show");
+    ui.score.classList.remove("bump");
+    ui.balls.parentElement.classList.remove("bump");
+    updateHud(true);
+    ensureAudio();
+    sfxReset();
+
+    // If auto drop is armed, roll straight into the next run.
+    if (state.auto) scheduleAutoDrop(520);
+  }
+
+  function updateHud(force) {
+    setText(ui.score, formatScore(state.score), force);
+    setText(ui.best, formatScore(state.best), force);
+    setText(ui.balls, String(state.ballsLeft), force);
+    setText(
+      ui.dropNumber,
+      state.ballsLeft > 0
+        ? String(Math.min(99, state.dropCount + 1)).padStart(2, "0")
+        : "—",
+      force
+    );
+
+    const liveBalls = state.activeBalls.filter((ball) => !ball.captured);
+    let topBall = null;
+    for (const ball of liveBalls) {
+      if (!topBall || ball.chainHits > topBall.chainHits) topBall = ball;
+    }
+
+    const hits = topBall ? topBall.chainHits : 0;
+    const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+    const multiplier = Math.min(5, 1 + Math.floor(hits / chainStep));
+    setText(ui.chainMult, `×${multiplier}`, force);
+    setText(ui.chainRule, `${chainStep} HITS = ×2`, force);
+
+    const fill = topBall
+      ? `${clamp((hits / (chainStep * 4)) * 100, 0, 100)}%`
+      : "0%";
+    if (force || fill !== chainFillWidth) {
+      ui.chainFill.style.width = fill;
+      chainFillWidth = fill;
+    }
+
+    const chainText = topBall
+      ? hits > 0
+        ? `${hits} HIT${hits === 1 ? "" : "S"}`
+        : "IN FLIGHT"
+      : state.status === "over"
+        ? "RUN OVER"
+        : "READY";
+    setText(ui.chainHits, chainText, force);
+
+    const luckyEvery = Math.max(2, Math.floor(bonuses.luckyEvery) || 5);
+    const untilLucky =
+      (luckyEvery - 1 - (state.dropCount % luckyEvery) + luckyEvery) % luckyEvery;
+    const hasDrops = state.ballsLeft > 0;
+    const resolving = !hasDrops && state.activeBalls.length > 0;
+    setText(
+      ui.luckyText,
+      resolving
+        ? "IN FLIGHT"
+        : !hasDrops
+        ? "NO DROPS LEFT"
+        : untilLucky === 0
+          ? "NEXT DROP · ×2"
+          : `IN ${untilLucky} DROP${untilLucky === 1 ? "" : "S"}`,
+      force
+    );
+    ui.luckyCard.classList.toggle("is-next", hasDrops && untilLucky === 0);
+    setText(
+      ui.runBallRule,
+      `${STARTING_BALLS + bonuses.startingBalls} BALLS / RUN`,
+      force
+    );
+
+    const canDrop =
+      state.ballsLeft > 0 && state.status !== "ending" && state.status !== "over";
+    if (ui.dropBtn.disabled === canDrop) ui.dropBtn.disabled = !canDrop;
+    setText(
+      ui.dropBtn.querySelector("span"),
+      canDrop ? "DROP BALL" : resolving ? "IN PLAY" : "NO BALLS",
+      force
+    );
+  }
+
+  function setText(element, value, force) {
+    if (!element) return;
+    if (force || element.textContent !== value) element.textContent = value;
+  }
+
+  function updateEffects(dt) {
+    state.time += dt;
+    state.shake *= Math.exp(-7.5 * dt);
+    if (state.shake < 0.03) state.shake = 0;
+    state.flash *= Math.exp(-7 * dt);
+    if (state.flash < 0.003) state.flash = 0;
+
+    const pinDecay = REDUCED_MOTION ? 6.5 : 3.3;
+    for (const pin of pins) {
+      if (pin.flash > 0) {
+        pin.flash = Math.max(0, pin.flash - dt * pinDecay);
+      }
+    }
+
+    for (const slot of slots) {
+      if (slot.flash > 0) {
+        slot.flash = Math.max(0, slot.flash - dt * 2.5);
+      }
+    }
+
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const particle = state.particles[i];
+      particle.life -= dt;
+      if (particle.life <= 0) {
+        state.particles.splice(i, 1);
+        continue;
+      }
+      particle.vy += (particle.gravity || 0) * dt;
+      particle.vx *= 1 - (particle.drag || 0) * dt;
+      particle.vy *= 1 - (particle.drag || 0) * dt;
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.rotation += particle.spin * dt;
+    }
+
+    for (let i = state.floats.length - 1; i >= 0; i--) {
+      const float = state.floats[i];
+      float.life -= dt;
+      float.y -= float.rise * dt;
+      if (float.life <= 0) state.floats.splice(i, 1);
+    }
+  }
+
+  function spawnSparks(x, y, color, count, power) {
+    if (state.particles.length > 280) return;
+    const actualCount = REDUCED_MOTION ? Math.ceil(count * 0.4) : count;
+    for (let i = 0; i < actualCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = (28 + Math.random() * 175) * power;
+      const life = 0.24 + Math.random() * 0.55;
+      state.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 45 * power,
+        life,
+        maxLife: life,
+        size: 1.2 + Math.random() * 2.5,
+        color,
+        gravity: 580,
+        drag: 1.4,
+        shape: "circle",
+        rotation: 0,
+        spin: 0
+      });
+    }
+  }
+
+  function spawnConfetti(x, y) {
+    if (REDUCED_MOTION) return;
+    const colors = [C.gold, C.coral, C.cyan, C.violet, "#fff2d0"];
+    for (let i = 0; i < 72; i++) {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1;
+      const speed = 120 + Math.random() * 480;
+      const life = 1.2 + Math.random() * 1.4;
+      state.particles.push({
+        x: x + (Math.random() - 0.5) * 38,
+        y: y + (Math.random() - 0.5) * 18,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life,
+        maxLife: life,
+        size: 2 + Math.random() * 4,
+        color: colors[(Math.random() * colors.length) | 0],
+        gravity: 480,
+        drag: 0.55,
+        shape: "rect",
+        rotation: Math.random() * Math.PI,
+        spin: (Math.random() - 0.5) * 14
+      });
+    }
+  }
+
+  function addFloatingText(x, y, text, color, size, life) {
+    state.floats.push({
+      x,
+      y,
+      text,
+      color,
+      size,
+      life,
+      maxLife: life,
+      rise: 29 + Math.random() * 15
+    });
+  }
+
+  function formatScore(value) {
+    return Math.max(0, Math.round(value)).toLocaleString("en-US");
+  }
+
+  function render(dt) {
+    ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const shakeX = (Math.random() * 2 - 1) * state.shake;
+    const shakeY = (Math.random() * 2 - 1) * state.shake;
+
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
+    drawCabinetBase();
+    drawGlassContents(dt);
+    drawGlassOverlay();
+    drawCabinetDetails();
+
+    ctx.restore();
+
+    if (state.flash > 0.004) {
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = hexToRgba(state.flashColor, state.flash * 0.24);
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+
+  function drawCabinetBase() {
+    ctx.save();
+
+    roundPath(FRAME.x, FRAME.y, FRAME.w, FRAME.h, FRAME.r);
+    const frameGradient = ctx.createLinearGradient(20, 20, 740, 1040);
+    frameGradient.addColorStop(0, "#292a4b");
+    frameGradient.addColorStop(0.28, "#15182c");
+    frameGradient.addColorStop(0.6, "#0b0e1b");
+    frameGradient.addColorStop(1, "#24213b");
+    ctx.fillStyle = frameGradient;
+    ctx.fill();
+
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(255, 239, 208, 0.17)";
+    ctx.stroke();
+
+    roundPath(16, 16, 728, 1028, 33);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.055)";
+    ctx.stroke();
+
+    // Marquee plaque.
+    roundPath(42, 17, 676, 49, 15);
+    const marquee = ctx.createLinearGradient(0, 18, 0, 66);
+    marquee.addColorStop(0, "#1b1a34");
+    marquee.addColorStop(1, "#0a0d1c");
+    ctx.fillStyle = marquee;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 218, 157, 0.16)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.textBaseline = "middle";
+    ctx.font = '800 12px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillStyle = "#f0d49e";
+    drawSpacedText("NOVA  PACHINKO", W / 2, 42, 5.2);
+
+    ctx.fillStyle = "rgba(255, 199, 95, 0.62)";
+    drawDiamond(56, 41.5, 3.3);
+    drawDiamond(704, 41.5, 3.3);
+
+    ctx.font = '700 6px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillStyle = "rgba(255, 242, 213, 0.42)";
+    drawSpacedText("DROP  ·  BOUNCE  ·  BANK", W / 2, 1042, 2.2);
+
+    // Bottom plate.
+    roundPath(248, 1032, 264, 14, 7);
+    ctx.fillStyle = "rgba(6, 9, 18, 0.85)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawGlassContents(dt) {
+    ctx.save();
+    roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+    ctx.clip();
+
+    const bg = ctx.createLinearGradient(0, GLASS.y, 0, GLASS.y + GLASS.h);
+    bg.addColorStop(0, "#0b1226");
+    bg.addColorStop(0.45, "#070c1a");
+    bg.addColorStop(1, "#090b17");
+    ctx.fillStyle = bg;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+
+    const glow = ctx.createRadialGradient(380, 470, 20, 380, 500, 470);
+    glow.addColorStop(0, "rgba(100, 74, 255, 0.14)");
+    glow.addColorStop(0.45, "rgba(60, 48, 160, 0.045)");
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+
+    drawStarField();
+    drawGrid();
+    drawFieldRings();
+    drawTopChute();
+    drawAimGuide();
+    drawSlots();
+    drawSideRails();
+    drawPins();
+    drawBalls();
+    drawSlotDividers();
+    drawParticles();
+    drawLights();
+    drawFloatingTexts();
+    drawScanlines();
+    drawVignette();
+    drawTensionOverlay();
+
+    ctx.restore();
+  }
+
+  function drawStarField() {
+    ctx.save();
+    for (const star of stars) {
+      const twinkle = 0.72 + Math.sin(state.time * star.speed + star.twinkle) * 0.28;
+      ctx.globalAlpha = star.a * twinkle;
+      ctx.fillStyle = "#dffcf8";
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawGrid() {
+    ctx.save();
+    ctx.strokeStyle = "rgba(145, 159, 230, 0.032)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 74; x < 700; x += 48) {
+      ctx.moveTo(x, GLASS.y + 1);
+      ctx.lineTo(x, SLOT_TOP);
+    }
+    for (let y = 92; y < SLOT_TOP; y += 48) {
+      ctx.moveTo(PLAY.left, y);
+      ctx.lineTo(PLAY.right, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFieldRings() {
+    ctx.save();
+    ctx.translate(380, 472);
+    ctx.strokeStyle = "rgba(94, 239, 220, 0.035)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, 245, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(176, 135, 255, 0.04)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 332, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.setLineDash([2, 12]);
+    ctx.strokeStyle = "rgba(255, 213, 143, 0.055)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 284, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTopChute() {
+    ctx.save();
+    const topGradient = ctx.createLinearGradient(0, GLASS.y, 0, PLAY.top + 40);
+    topGradient.addColorStop(0, "rgba(23, 31, 62, 0.9)");
+    topGradient.addColorStop(1, "rgba(8, 12, 25, 0)");
+    ctx.fillStyle = topGradient;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, 92);
+
+    ctx.font = '700 7px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillStyle = "rgba(213, 194, 166, 0.38)";
+    ctx.textAlign = "center";
+    drawSpacedText("DROP ZONE", W / 2, 103, 2.6);
+
+    ctx.strokeStyle = "rgba(77, 245, 221, 0.13)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PLAY.left + 18, 124);
+    ctx.lineTo(330, 124);
+    ctx.moveTo(430, 124);
+    ctx.lineTo(PLAY.right - 18, 124);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawAimGuide() {
+    if (state.status === "over" || state.ballsLeft <= 0) return;
+
+    const x = clamp(state.aimX, PLAY.left + BALL_R + 10, PLAY.right - BALL_R - 10);
+    const pulse = 0.72 + Math.sin(state.time * 2.4) * 0.12;
+    const gap = Math.abs(x - W / 2) / 320;
+
+    ctx.save();
+
+    const beam = ctx.createLinearGradient(0, 138, 0, 234);
+    beam.addColorStop(0, hexToRgba(C.cyan, 0.12));
+    beam.addColorStop(1, hexToRgba(C.cyan, 0));
+    ctx.fillStyle = beam;
+    ctx.fillRect(x - 18, 138, 36, 96);
+
+    ctx.setLineDash([3, 7]);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = hexToRgba(C.cyan, 0.4 * pulse);
+    ctx.beginPath();
+    ctx.moveTo(x, 164);
+    ctx.lineTo(x, 224);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = hexToRgba(C.cyan, 0.24 * pulse);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 18, 136);
+    ctx.lineTo(x - 18, 150);
+    ctx.quadraticCurveTo(x - 18, 158, x - 10, 158);
+    ctx.moveTo(x + 18, 136);
+    ctx.lineTo(x + 18, 150);
+    ctx.quadraticCurveTo(x + 18, 158, x + 10, 158);
+    ctx.stroke();
+
+    for (let i = 0; i < 2; i++) {
+      const y = 196 + i * 13;
+      ctx.strokeStyle = hexToRgba(C.cyan, (0.2 - i * 0.055) * pulse);
+      ctx.beginPath();
+      ctx.moveTo(x - 6, y);
+      ctx.lineTo(x, y + 5);
+      ctx.lineTo(x + 6, y);
+      ctx.stroke();
+    }
+
+    const ghost = ctx.createRadialGradient(
+      x - 2.5,
+      163.5,
+      0.5,
+      x,
+      166,
+      10
+    );
+    ghost.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+    ghost.addColorStop(0.35, hexToRgba(C.cyan, 0.42));
+    ghost.addColorStop(1, hexToRgba(C.cyan, 0));
+    ctx.fillStyle = ghost;
+    ctx.beginPath();
+    ctx.arc(x, 166, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = hexToRgba(C.cyan, 0.45 * pulse);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, 166, 10 + pulse * 2.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (gap > 0.45) {
+      ctx.fillStyle = hexToRgba(C.coral, 0.28);
+      ctx.beginPath();
+      ctx.arc(x, 166, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawSlots() {
+    ctx.save();
+    for (const slot of slots) {
+      const gradient = ctx.createLinearGradient(0, SLOT_TOP, 0, SLOT_BOTTOM);
+      gradient.addColorStop(0, hexToRgba(slot.color, 0.14));
+      gradient.addColorStop(0.5, hexToRgba(slot.color, 0.045));
+      gradient.addColorStop(1, hexToRgba(slot.color, 0.01));
+      ctx.fillStyle = gradient;
+      ctx.fillRect(slot.x + 1, SLOT_TOP, slot.w - 2, SLOT_BOTTOM - SLOT_TOP);
+
+      if (slot.flash > 0) {
+        ctx.fillStyle = hexToRgba(slot.color, slot.flash * 0.18);
+        ctx.fillRect(slot.x + 1, SLOT_TOP, slot.w - 2, SLOT_BOTTOM - SLOT_TOP);
+        ctx.strokeStyle = hexToRgba(slot.color, slot.flash * 0.65);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(slot.x + 2.5, SLOT_TOP + 1.5, slot.w - 5, SLOT_BOTTOM - SLOT_TOP - 3);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      if (slot.jackpot) {
+        ctx.save();
+        ctx.shadowColor = hexToRgba(C.gold, 0.7);
+        ctx.shadowBlur = 12 + slot.flash * 20;
+        ctx.font = '700 19px "Cascadia Mono", "Lucida Console", monospace';
+        ctx.fillStyle = "#ffe5a8";
+        ctx.fillText(slot.label, slot.center, SLOT_TOP + 45);
+        ctx.restore();
+
+        ctx.font = '700 6.5px Bahnschrift, "Trebuchet MS", sans-serif';
+        ctx.fillStyle = hexToRgba(C.gold, 0.72);
+        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 67, 1.4);
+      } else {
+        ctx.font = slot.bonus
+          ? '700 24px "Cascadia Mono", "Lucida Console", monospace'
+          : '700 21px "Cascadia Mono", "Lucida Console", monospace';
+        ctx.fillStyle = hexToRgba(slot.color, 0.82);
+        ctx.fillText(slot.label, slot.center, SLOT_TOP + 46);
+
+        ctx.font = '700 7px Bahnschrift, "Trebuchet MS", sans-serif';
+        ctx.fillStyle = hexToRgba(slot.color, 0.52);
+        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 68, 1.5);
+      }
+
+      ctx.strokeStyle = hexToRgba(slot.color, 0.48);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(slot.x + 12, SLOT_TOP + 0.5);
+      ctx.lineTo(slot.x + slot.w - 12, SLOT_TOP + 0.5);
+      ctx.stroke();
+
+      ctx.strokeStyle = hexToRgba(slot.color, 0.18);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(slot.x + 16, SLOT_BOTTOM - 18);
+      ctx.lineTo(slot.x + slot.w - 16, SLOT_BOTTOM - 18);
+      ctx.stroke();
+
+      if (slot.jackpot) {
+        const jackpotGlow = 0.5 + Math.sin(state.time * 1.9) * 0.14;
+        ctx.fillStyle = hexToRgba(C.gold, 0.1 * jackpotGlow);
+        ctx.fillRect(slot.x + 1, SLOT_TOP, slot.w - 2, SLOT_BOTTOM - SLOT_TOP);
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawSideRails() {
+    ctx.save();
+    const left = ctx.createLinearGradient(0, 136, 0, SLOT_TOP);
+    left.addColorStop(0, "rgba(255, 238, 204, 0.45)");
+    left.addColorStop(0.45, "rgba(77, 245, 221, 0.18)");
+    left.addColorStop(1, "rgba(77, 245, 221, 0.04)");
+    ctx.strokeStyle = left;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(PLAY.left + 1, 142);
+    ctx.lineTo(PLAY.left + 1, SLOT_TOP);
+    ctx.moveTo(PLAY.right - 1, 142);
+    ctx.lineTo(PLAY.right - 1, SLOT_TOP);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(PLAY.left - 5, 150);
+    ctx.lineTo(PLAY.left - 5, SLOT_TOP);
+    ctx.moveTo(PLAY.right + 5, 150);
+    ctx.lineTo(PLAY.right + 5, SLOT_TOP);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPins() {
+    for (const pin of pins) {
+      const glow = pin.flash;
+
+      if (glow > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = glow * 0.3;
+        ctx.fillStyle = pin.gold ? C.gold : C.cyan;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r + 10 + glow * 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (pin.gold) {
+        const pulse = 0.55 + Math.sin(state.time * 2.2 + pin.id) * 0.12;
+        ctx.save();
+        ctx.shadowColor = hexToRgba(C.gold, 0.55);
+        ctx.shadowBlur = 12 + pulse * 8 + glow * 18;
+
+        const body = ctx.createRadialGradient(
+          pin.x - pin.r * 0.34,
+          pin.y - pin.r * 0.4,
+          0.4,
+          pin.x,
+          pin.y,
+          pin.r * 1.2
+        );
+        body.addColorStop(0, "#fff9dd");
+        body.addColorStop(0.32, "#ffd77c");
+        body.addColorStop(0.74, "#c98329");
+        body.addColorStop(1, "#6d3b15");
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255, 237, 180, 0.75)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = hexToRgba("#fff2c8", 0.42 + glow * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(pin.x - pin.r * 0.48, pin.y);
+        ctx.lineTo(pin.x + pin.r * 0.48, pin.y);
+        ctx.moveTo(pin.x, pin.y - pin.r * 0.48);
+        ctx.lineTo(pin.x, pin.y + pin.r * 0.48);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = "rgba(5, 7, 16, 0.46)";
+        ctx.beginPath();
+        ctx.arc(pin.x + 1.2, pin.y + 1.8, pin.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#cbc4df";
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(27, 25, 44, 0.85)";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.38)";
+        ctx.beginPath();
+        ctx.arc(pin.x - 1.25, pin.y - 1.45, pin.r * 0.46, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.48)";
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r - 1, Math.PI * 1.03, Math.PI * 1.67);
+        ctx.stroke();
+      }
+
+      if (glow > 0.02) {
+        ctx.save();
+        ctx.globalAlpha = glow * 0.9;
+        ctx.strokeStyle = pin.gold ? C.gold : C.cyan;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r + 3.5 + glow * 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawBalls() {
+    for (const ball of state.activeBalls) {
+      const alpha = ball.alpha;
+      if (ball.captured) {
+        drawBall(ball, alpha, true);
+        continue;
+      }
+
+      const trail = ball.trail;
+      if (trail.length > 1) {
+        ctx.save();
+        for (let i = 0; i < trail.length; i++) {
+          const t = i / trail.length;
+          const alphaTrail = t * t * 0.16 * alpha;
+          ctx.globalAlpha = alphaTrail;
+          ctx.fillStyle = ball.gold ? C.gold : C.cyan;
+          ctx.beginPath();
+          ctx.arc(trail[i].x, trail[i].y, ball.r * (0.3 + t * 0.68), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      drawBall(ball, alpha, false);
+    }
+  }
+
+  function drawBall(ball, alpha, captured) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    if (ball.gold) {
+      const aura = ctx.createRadialGradient(
+        ball.x,
+        ball.y,
+        ball.r * 0.4,
+        ball.x,
+        ball.y,
+        ball.r * 2.8
+      );
+      aura.addColorStop(0, "rgba(255, 204, 104, 0.24)");
+      aura.addColorStop(1, "rgba(255, 183, 65, 0)");
+      ctx.fillStyle = aura;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r * 2.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.shadowColor = ball.gold ? "rgba(255, 191, 92, 0.8)" : "rgba(77, 245, 221, 0.55)";
+    ctx.shadowBlur = ball.gold ? 17 : 11;
+
+    const body = ctx.createRadialGradient(
+      ball.x - ball.r * 0.34,
+      ball.y - ball.r * 0.42,
+      0.5,
+      ball.x,
+      ball.y,
+      ball.r * 1.15
+    );
+
+    if (ball.gold) {
+      body.addColorStop(0, "#fffef1");
+      body.addColorStop(0.3, "#ffe3a0");
+      body.addColorStop(0.7, "#d99128");
+      body.addColorStop(1, "#7b4111");
+    } else {
+      body.addColorStop(0, "#ffffff");
+      body.addColorStop(0.3, "#e6fffb");
+      body.addColorStop(0.7, "#a3f5e8");
+      body.addColorStop(1, "#398e91");
+    }
+
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = ball.gold
+      ? "rgba(255, 242, 194, 0.72)"
+      : "rgba(217, 255, 250, 0.64)";
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    ctx.beginPath();
+    ctx.arc(ball.x - 2.8, ball.y - 3.1, 1.55, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (!captured) {
+      const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+      const mult = Math.min(5, 1 + Math.floor(ball.chainHits / chainStep));
+      if (mult > 1) {
+        ctx.globalAlpha = alpha * 0.28;
+        ctx.strokeStyle = ball.gold ? C.gold : C.cyan;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.r + 3 + (mult - 1) * 1.2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function drawSlotDividers() {
+    ctx.save();
+    for (const divider of slotDividers) {
+      ctx.lineCap = "round";
+
+      ctx.strokeStyle = "rgba(3, 5, 12, 0.9)";
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(divider.x, divider.y1 + 2);
+      ctx.lineTo(divider.x, divider.y2);
+      ctx.stroke();
+
+      const metal = ctx.createLinearGradient(0, divider.y1, 0, divider.y2);
+      metal.addColorStop(0, "#f5e4c4");
+      metal.addColorStop(0.15, "#a49bb5");
+      metal.addColorStop(0.65, "#4a4563");
+      metal.addColorStop(1, "#24233c");
+      ctx.strokeStyle = metal;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(divider.x, divider.y1 + 2);
+      ctx.lineTo(divider.x, divider.y2);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 243, 214, 0.86)";
+      ctx.beginPath();
+      ctx.arc(divider.x, divider.y1 + 2, 2.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawParticles() {
+    ctx.save();
+    for (const particle of state.particles) {
+      const alpha = clamp(particle.life / (particle.maxLife * 0.55), 0, 1);
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.fillStyle = particle.color;
+
+      if (particle.shape === "rect") {
+        ctx.save();
+        ctx.translate(particle.x, particle.y);
+        ctx.rotate(particle.rotation);
+        ctx.fillRect(
+          -particle.size * 0.5,
+          -particle.size * 0.28,
+          particle.size,
+          particle.size * 0.56
+        );
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size * alpha, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  const glowCache = new Map();
+
+  // Cached radial-gradient sprite: one drawImage per light instead of building
+  // a gradient object inside the render loop.
+  function glowSprite(color) {
+    let sprite = glowCache.get(color);
+    if (sprite) return sprite;
+
+    const size = 128;
+    sprite = document.createElement("canvas");
+    sprite.width = size;
+    sprite.height = size;
+    const paint = sprite.getContext("2d");
+    const gradient = paint.createRadialGradient(
+      size / 2,
+      size / 2,
+      0,
+      size / 2,
+      size / 2,
+      size / 2
+    );
+    gradient.addColorStop(0, hexToRgba(color, 0.95));
+    gradient.addColorStop(0.34, hexToRgba(color, 0.42));
+    gradient.addColorStop(0.64, hexToRgba(color, 0.12));
+    gradient.addColorStop(1, hexToRgba(color, 0));
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, size, size);
+
+    glowCache.set(color, sprite);
+    return sprite;
+  }
+
+  function lightGlow(x, y, width, height, color, alpha) {
+    if (alpha <= 0.006) return;
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.drawImage(glowSprite(color), x - width / 2, y - height / 2, width, height);
+  }
+
+  // A one-sided warm strip for light spilling onto the inner glass walls.
+  let wallStrip = null;
+  function wallSprite() {
+    if (wallStrip) return wallStrip;
+    wallStrip = document.createElement("canvas");
+    wallStrip.width = 128;
+    wallStrip.height = 8;
+    const paint = wallStrip.getContext("2d");
+    const gradient = paint.createLinearGradient(0, 0, 128, 0);
+    gradient.addColorStop(0, "rgba(255, 208, 138, 0.72)");
+    gradient.addColorStop(0.35, "rgba(255, 194, 122, 0.18)");
+    gradient.addColorStop(1, "rgba(255, 190, 120, 0)");
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, 128, 8);
+    return wallStrip;
+  }
+
+  // A soft diagonal band that drifts across the glass cover like a room
+  // reflection. Kept faint so it lifts the board without reading as a wipe.
+  let sheenBand = null;
+  function sheenSprite() {
+    if (sheenBand) return sheenBand;
+    sheenBand = document.createElement("canvas");
+    sheenBand.width = 256;
+    sheenBand.height = 8;
+    const paint = sheenBand.getContext("2d");
+    const gradient = paint.createLinearGradient(0, 0, 256, 0);
+    gradient.addColorStop(0, "rgba(210, 228, 255, 0)");
+    gradient.addColorStop(0.34, "rgba(210, 228, 255, 0.16)");
+    gradient.addColorStop(0.5, "rgba(226, 240, 255, 0.42)");
+    gradient.addColorStop(0.66, "rgba(210, 228, 255, 0.16)");
+    gradient.addColorStop(1, "rgba(210, 228, 255, 0)");
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, 256, 8);
+    return sheenBand;
+  }
+
+  // The parlor lighting pass: pockets glow, the jackpot tower breathes, a chase
+  // of bulbs runs along the payout rail, and every ball carries its own light.
+  function drawLights() {
+    const t = REDUCED_MOTION ? 0 : state.time;
+    const dim = state.status === "over" ? 0.5 : 1;
+    const tension = state.slowMo > 0 ? 1 : 0;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    // The inner glass walls catch the marquee light, so the playfield reads as
+    // the inside of a lit cabinet rather than a floating plane.
+    const wall = (0.05 + (state.status === "playing" ? 0.02 : 0)) * dim;
+    ctx.globalAlpha = wall;
+    const wallWidth = 170;
+    ctx.drawImage(wallSprite(), GLASS.x, GLASS.y, wallWidth, GLASS.h);
+    ctx.save();
+    ctx.translate(GLASS.x + GLASS.w, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(wallSprite(), 0, GLASS.y, wallWidth, GLASS.h);
+    ctx.restore();
+
+    // A slow reflection travels across the glass cover.
+    if (!REDUCED_MOTION) {
+      const sweep = (t * 0.075) % 1;
+      const sweepX = GLASS.x - 220 + sweep * (GLASS.w + 440);
+      ctx.globalAlpha = 0.12 * dim;
+      ctx.save();
+      ctx.translate(sweepX, GLASS.y + GLASS.h * 0.5);
+      ctx.rotate(-0.26);
+      ctx.drawImage(sheenSprite(), -210, -820, 420, 1640);
+      ctx.restore();
+    }
+
+    for (const slot of slots) {
+      const breathe = 0.74 + Math.sin(t * 1.6 + slot.x * 0.013) * 0.2;
+      const power =
+        (slot.jackpot ? 0.16 : 0.11) * breathe * dim + slot.flash * 0.7;
+      lightGlow(slot.center, SLOT_TOP + 22, slot.w * 1.1, 180, slot.color, power);
+      lightGlow(slot.center, SLOT_TOP - 30, slot.w * 1.6, 220, slot.color, power * 0.55);
+    }
+
+    const towerPulse = 0.5 + Math.sin(t * 2.1) * 0.18;
+    lightGlow(
+      JACKPOT_SLOT.center,
+      SLOT_TOP - 118,
+      220,
+      430,
+      C.gold,
+      (0.06 + towerPulse * 0.04 + tension * 0.16) * dim
+    );
+
+    // Chase bulbs on the rail above the pockets. They idle slow, run while the
+    // board is live, and sprint while a jackpot is being decided.
+    const bulbCount = 34;
+    const bulbSpeed = tension ? 26 : state.status === "playing" ? 15 : 6;
+    const head = (t * bulbSpeed) % (bulbCount + 10);
+    const railY = SLOT_TOP - 13;
+    for (let i = 0; i < bulbCount; i++) {
+      const x = PLAY.left + 12 + (i / (bulbCount - 1)) * (PLAY.right - PLAY.left - 24);
+      const distance = Math.abs(i - head);
+      const wave = distance < 9 ? Math.pow(1 - distance / 9, 2.2) : 0;
+      const shimmer = 0.5 + Math.sin(t * 5.5 + i * 1.7) * 0.14;
+      const bulb = (0.1 * shimmer + wave * 0.72) * dim;
+
+      lightGlow(x, railY, wave > 0.2 ? 54 : 26, wave > 0.2 ? 54 : 26, C.gold, bulb);
+      if (wave > 0.04) {
+        ctx.globalAlpha = Math.min(1, wave * 1.15);
+        ctx.fillStyle = "#fff5dc";
+        ctx.beginPath();
+        ctx.arc(x, railY, 1.3 + wave * 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    for (const ball of state.activeBalls) {
+      const speed = Math.hypot(ball.vx, ball.vy);
+      const halo = clamp(0.1 + speed / 2500, 0.1, 0.44) * ball.alpha;
+      lightGlow(ball.x, ball.y, 58, 58, ball.gold ? C.gold : C.cyan, halo);
+    }
+
+    for (const pin of pins) {
+      if (pin.flash <= 0.02) continue;
+      lightGlow(pin.x, pin.y, 46, 46, pin.gold ? C.gold : C.cyan, pin.flash * 0.4);
+    }
+
+    ctx.restore();
+  }
+
+  function drawFloatingTexts() {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const float of state.floats) {
+      const progress = 1 - float.life / float.maxLife;
+      const alpha = Math.min(1, progress * 9, float.life / (float.maxLife * 0.3));
+
+      ctx.globalAlpha = clamp(alpha, 0, 1);
+      ctx.font = `700 ${float.size}px Bahnschrift, "Trebuchet MS", sans-serif`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(3, 5, 12, 0.78)";
+      ctx.strokeText(float.text, float.x, float.y);
+      ctx.fillStyle = float.color;
+      ctx.fillText(float.text, float.x, float.y);
+    }
+    ctx.restore();
+  }
+
+  function drawScanlines() {
+    ctx.save();
+    ctx.globalAlpha = 0.035;
+    ctx.fillStyle = "#bdeee8";
+    for (let y = GLASS.y + 2; y < SLOT_BOTTOM; y += 4) {
+      ctx.fillRect(GLASS.x, y, GLASS.w, 1);
+    }
+    ctx.restore();
+  }
+
+  function drawVignette() {
+    const vignette = ctx.createRadialGradient(W / 2, 455, 170, W / 2, 500, 590);
+    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vignette.addColorStop(0.66, "rgba(1, 3, 10, 0.08)");
+    vignette.addColorStop(1, "rgba(1, 3, 10, 0.62)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+  }
+
+  function drawTensionOverlay() {
+    if (state.slowMo <= 0.001 || !state.tensionBall) return;
+
+    const ball = state.tensionBall;
+    const strength = clamp(state.slowMo / 0.95, 0, 1);
+    const pulse = 0.74 + Math.sin(state.time * 16) * 0.26;
+
+    ctx.save();
+    const focus = ctx.createRadialGradient(ball.x, ball.y, 24, ball.x, ball.y, 560);
+    focus.addColorStop(0, "rgba(255, 202, 99, 0)");
+    focus.addColorStop(0.32, `rgba(4, 7, 16, ${0.04 * strength})`);
+    focus.addColorStop(1, `rgba(1, 3, 9, ${0.66 * strength})`);
+    ctx.fillStyle = focus;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+
+    ctx.strokeStyle = `rgba(255, 203, 102, ${0.62 * strength * pulse})`;
+    ctx.lineWidth = 1.2;
+    ctx.shadowColor = `rgba(255, 194, 82, ${0.55 * strength})`;
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r + 13 + pulse * 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.3 * strength;
+    ctx.strokeStyle = "rgba(255, 239, 202, 0.7)";
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r + 25 + pulse * 7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function flyTokenToHud(slot) {
+    if (REDUCED_MOTION || !slot || !ui.tokenBtn) return;
+
+    const board = canvas.getBoundingClientRect();
+    const target = ui.tokenBtn.getBoundingClientRect();
+    if (!board.width || !target.width) return;
+
+    const fromX = board.left + (slot.center / W) * board.width;
+    const fromY = board.top + ((SLOT_TOP + 26) / H) * board.height;
+    const toX = target.left + target.width / 2;
+    const toY = target.top + target.height / 2;
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+
+    const token = document.createElement("div");
+    token.className = "token-fly";
+    token.textContent = "✦";
+    token.setAttribute("aria-hidden", "true");
+    token.style.left = `${fromX}px`;
+    token.style.top = `${fromY}px`;
+    document.body.appendChild(token);
+
+    if (typeof token.animate !== "function") {
+      token.remove();
+      return;
+    }
+
+    const animation = token.animate(
+      [
+        {
+          transform: "translate(-50%, -50%) scale(0.35) rotate(0deg)",
+          opacity: 0
+        },
+        {
+          transform: `translate(calc(-50% + ${dx * 0.28}px), calc(-50% + ${dy * 0.26 - 96}px)) scale(1.18) rotate(150deg)`,
+          opacity: 1,
+          offset: 0.38
+        },
+        {
+          transform: `translate(calc(-50% + ${dx * 0.72}px), calc(-50% + ${dy * 0.7 - 52}px)) scale(0.95) rotate(300deg)`,
+          opacity: 1,
+          offset: 0.72
+        },
+        {
+          transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.35) rotate(420deg)`,
+          opacity: 0
+        }
+      ],
+      {
+        duration: 960,
+        easing: "cubic-bezier(0.2, 0.72, 0.18, 1)"
+      }
+    );
+
+    const cleanup = () => token.remove();
+    animation.onfinish = cleanup;
+    animation.oncancel = cleanup;
+    window.setTimeout(cleanup, 1300);
+  }
+
+  function haptic(pattern) {
+    if (REDUCED_MOTION) return;
+    try {
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch {
+      // Haptics are a progressive enhancement.
+    }
+  }
+
+  function drawGlassOverlay() {
+    ctx.save();
+    roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+    ctx.clip();
+
+    const glare = ctx.createLinearGradient(40, 80, 470, 890);
+    glare.addColorStop(0, "rgba(255, 255, 255, 0.06)");
+    glare.addColorStop(0.2, "rgba(255, 255, 255, 0.012)");
+    glare.addColorStop(0.5, "rgba(255, 255, 255, 0)");
+    glare.addColorStop(1, "rgba(255, 255, 255, 0.018)");
+    ctx.fillStyle = glare;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+
+    ctx.globalAlpha = 0.2;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.14)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(GLASS.x + 26, GLASS.y + 8);
+    ctx.lineTo(GLASS.x + 340, GLASS.y + 8);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+    ctx.strokeStyle = "rgba(255, 240, 211, 0.2)";
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+
+    roundPath(GLASS.x + 4, GLASS.y + 4, GLASS.w - 8, GLASS.h - 8, GLASS.r - 4);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCabinetDetails() {
+    ctx.save();
+
+    // Side accent strips.
+    const strip = ctx.createLinearGradient(0, 90, 0, 1010);
+    strip.addColorStop(0, "rgba(255, 201, 103, 0)");
+    strip.addColorStop(0.16, "rgba(255, 201, 103, 0.24)");
+    strip.addColorStop(0.5, "rgba(255, 201, 103, 0.08)");
+    strip.addColorStop(0.84, "rgba(255, 201, 103, 0.18)");
+    strip.addColorStop(1, "rgba(255, 201, 103, 0)");
+    ctx.fillStyle = strip;
+    ctx.fillRect(20, 98, 2, 916);
+    ctx.fillRect(738, 98, 2, 916);
+
+    // Screws.
+    const screws = [
+      [25, 25],
+      [735, 25],
+      [25, 1035],
+      [735, 1035]
+    ];
+    for (const [x, y] of screws) {
+      ctx.fillStyle = "#0a0c17";
+      ctx.beginPath();
+      ctx.arc(x, y, 5.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 242, 218, 0.15)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 242, 218, 0.28)";
+      ctx.beginPath();
+      ctx.moveTo(x - 2, y);
+      ctx.lineTo(x + 2, y);
+      ctx.stroke();
+    }
+
+    // Lower cabinet lip.
+    ctx.strokeStyle = "rgba(255, 240, 211, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(54, 1029);
+    ctx.lineTo(706, 1029);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawDiamond(x, y, size) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x + size, y);
+    ctx.lineTo(x, y + size);
+    ctx.lineTo(x - size, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawSpacedText(text, centerX, y, spacing) {
+    const chars = Array.from(text);
+    let totalWidth = 0;
+    for (const char of chars) totalWidth += ctx.measureText(char).width + spacing;
+    totalWidth -= spacing;
+
+    let x = centerX - totalWidth / 2;
+    const previousAlign = ctx.textAlign;
+    ctx.textAlign = "left";
+    for (const char of chars) {
+      ctx.fillText(char, x, y);
+      x += ctx.measureText(char).width + spacing;
+    }
+    ctx.textAlign = previousAlign;
+  }
+
+  function roundPath(x, y, w, h, r) {
+    const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+
+  function ensureAudio() {
+    if (state.muted) return null;
+    try {
+      if (!audioCtx) {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextCtor) return null;
+        audioCtx = new AudioContextCtor();
+      }
+      if (!audioBus) audioBus = buildAudioBus(audioCtx);
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+      }
+      return audioCtx;
+    } catch {
+      return null;
+    }
+  }
+
+  // One master chain for everything: gentle glue compression so a burst of
+  // twelve balls never clips, plus a short plate tail for depth.
+  function buildAudioBus(ac) {
+    const master = ac.createGain();
+    master.gain.value = 0.9;
+
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -13;
+    comp.knee.value = 24;
+    comp.ratio.value = 2.6;
+    comp.attack.value = 0.005;
+    comp.release.value = 0.2;
+
+    master.connect(comp).connect(ac.destination);
+
+    let reverb = null;
+    try {
+      reverb = ac.createConvolver();
+      reverb.buffer = makeImpulse(ac, 0.6, 3.2);
+      const returnGain = ac.createGain();
+      returnGain.gain.value = 0.7;
+      reverb.connect(returnGain).connect(master);
+    } catch {
+      reverb = null;
+    }
+
+    return { master, reverb };
+  }
+
+  function makeImpulse(ac, seconds, decay) {
+    const length = Math.max(1, Math.floor(ac.sampleRate * seconds));
+    const buffer = ac.createBuffer(2, length, ac.sampleRate);
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      const data = buffer.getChannelData(channel);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      }
+    }
+    return buffer;
+  }
+
+  function getNoiseBuffer(ac) {
+    if (noiseBuffer && noiseBuffer.sampleRate === ac.sampleRate) return noiseBuffer;
+    const length = Math.floor(ac.sampleRate * 0.7);
+    noiseBuffer = ac.createBuffer(1, length, ac.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    return noiseBuffer;
+  }
+
+  // A short band-passed noise sweep. Used for the wheel's air: spinning up,
+  // settling down, and the little paper hush when a reward card lands.
+  function noiseSweep(from, to, duration, volume, q, pan, wet) {
+    const ac = ensureAudio();
+    if (!ac) return;
+    const start = ac.currentTime;
+    const noise = ac.createBufferSource();
+    noise.buffer = getNoiseBuffer(ac);
+    noise.loop = true;
+
+    const band = ac.createBiquadFilter();
+    band.type = "bandpass";
+    band.Q.value = q || 1;
+    band.frequency.setValueAtTime(Math.max(40, from), start);
+    band.frequency.exponentialRampToValueAtTime(Math.max(40, to), start + duration);
+
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + duration * 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    noise.connect(band).connect(gain);
+    routeToBus(ac, gain, pan || 0, Number.isFinite(wet) ? wet : 0.14);
+
+    noise.start(start);
+    noise.stop(start + duration + 0.05);
+  }
+
+  // The vault has its own room tone while it is open: a filtered low pad and a
+  // whisper of air, plus an occasional soft chime from the shelves. It fills the
+  // silence between the board and the wheel without becoming a soundtrack.
+  function startRoomAmbience() {
+    const ac = ensureAudio();
+    if (!ac || roomBed) return;
+
+    const start = ac.currentTime + 0.03;
+    const bed = {
+      gain: ac.createGain(),
+      voices: [],
+      sum: ac.createGain()
+    };
+
+    const padFilter = ac.createBiquadFilter();
+    padFilter.type = "lowpass";
+    padFilter.frequency.value = 680;
+    padFilter.Q.value = 0.5;
+
+    const padGain = ac.createGain();
+    padGain.gain.value = 1;
+    padFilter.connect(padGain).connect(bed.sum);
+
+    const chord = [
+      { hz: 110, vol: 0.3, type: "sine" },
+      { hz: 110.4, vol: 0.16, type: "sine" },
+      { hz: 164.81, vol: 0.19, type: "sine" },
+      { hz: 220, vol: 0.11, type: "triangle" },
+      { hz: 329.63, vol: 0.045, type: "sine" }
+    ];
+
+    for (const note of chord) {
+      const osc = ac.createOscillator();
+      osc.type = note.type;
+      osc.frequency.value = note.hz;
+      const voice = ac.createGain();
+      voice.gain.value = note.vol;
+      osc.connect(voice).connect(padFilter);
+      osc.start(start);
+      bed.voices.push(osc);
+    }
+
+    // Slow breathing so the room never sits perfectly still.
+    const lfo = ac.createOscillator();
+    lfo.frequency.value = 0.055;
+    const lfoDepth = ac.createGain();
+    lfoDepth.gain.value = 0.3;
+    lfo.connect(lfoDepth).connect(padGain.gain);
+    lfo.start(start);
+    bed.voices.push(lfo);
+
+    const air = ac.createBufferSource();
+    air.buffer = getNoiseBuffer(ac);
+    air.loop = true;
+    const airFilter = ac.createBiquadFilter();
+    airFilter.type = "bandpass";
+    airFilter.frequency.value = 880;
+    airFilter.Q.value = 0.55;
+    const airGain = ac.createGain();
+    airGain.gain.value = 0.06;
+    air.connect(airFilter).connect(airGain).connect(bed.sum);
+    air.start(start);
+    bed.voices.push(air);
+
+    bed.gain.gain.setValueAtTime(0.0001, start);
+    bed.gain.gain.exponentialRampToValueAtTime(0.022, start + 1.3);
+    bed.sum.connect(bed.gain);
+    routeToBus(ac, bed.gain, 0, 0.5);
+
+    roomBed = bed;
+    scheduleRoomChime();
+  }
+
+  function scheduleRoomChime() {
+    window.clearTimeout(roomChimeTimer);
+    if (!roomBed) return;
+    const wait = 7000 + Math.random() * 6500;
+    roomChimeTimer = window.setTimeout(() => {
+      if (!roomBed || state.muted) return;
+      const scale = [523.25, 587.33, 698.46, 783.99, 880];
+      const note = scale[Math.floor(Math.random() * scale.length)];
+      tone(note, 1.35, "sine", 0.0065, note * 1.001, 0, 0, 0.85);
+      if (Math.random() < 0.45) {
+        tone(note * 1.5, 1.6, "sine", 0.004, note * 1.5, 0, 0.34, 0.9);
+      }
+      scheduleRoomChime();
+    }, wait);
+  }
+
+  // The last second of a spin dips the room away and blooms a held G under it,
+  // so the landing chord lands in a pocket of quiet. G is the dominant of the
+  // C-major reveal, so the whole thing resolves instead of just stopping.
+  function startWheelTension() {
+    const ac = ensureAudio();
+    if (!ac || tensionVoice) return;
+
+    const start = ac.currentTime;
+    const voice = { gain: ac.createGain(), oscs: [] };
+
+    const filter = ac.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.Q.value = 0.9;
+    filter.frequency.setValueAtTime(560, start);
+    filter.frequency.linearRampToValueAtTime(1500, start + 1.5);
+
+    const notes = [
+      { hz: 49, vol: 0.16, type: "sine" },
+      { hz: 98, vol: 0.34, type: "sine" },
+      { hz: 196, vol: 0.5, type: "sine" },
+      { hz: 293.66, vol: 0.24, type: "sine" },
+      { hz: 392, vol: 0.1, type: "triangle" }
+    ];
+
+    for (const note of notes) {
+      const osc = ac.createOscillator();
+      osc.type = note.type;
+      osc.frequency.setValueAtTime(note.hz, start);
+      // Barely rising: enough to tighten the chest, not enough to sound out of tune.
+      osc.frequency.linearRampToValueAtTime(note.hz * 1.014, start + 1.6);
+      const voiceGain = ac.createGain();
+      voiceGain.gain.value = note.vol;
+      osc.connect(voiceGain).connect(filter);
+      osc.start(start);
+      voice.oscs.push(osc);
+    }
+
+    filter.connect(voice.gain);
+    voice.gain.gain.setValueAtTime(0.0001, start);
+    voice.gain.gain.exponentialRampToValueAtTime(0.018, start + 1.2);
+    voice.gain.gain.setValueAtTime(0.018, start + 1.8);
+    routeToBus(ac, voice.gain, 0, 0.42);
+
+    tensionVoice = voice;
+
+    // Take the room down so the drone has somewhere to sit.
+    if (roomBed) {
+      const now = ac.currentTime;
+      try {
+        roomBed.gain.gain.cancelScheduledValues(now);
+        roomBed.gain.gain.setValueAtTime(Math.max(0.0002, roomBed.gain.gain.value), now);
+        roomBed.gain.gain.exponentialRampToValueAtTime(0.0055, now + 0.6);
+      } catch {
+        // Suspended context; nothing to duck.
+      }
+    }
+
+    // Safety net: if the landing event is ever missed (muting mid-spin, a tab
+    // losing focus), the drone still releases instead of hanging forever.
+    window.clearTimeout(tensionTimer);
+    tensionTimer = window.setTimeout(endWheelTension, 6500);
+  }
+
+  function endWheelTension() {
+    window.clearTimeout(tensionTimer);
+    tensionTimer = 0;
+
+    const ac = audioCtx;
+    if (!ac) return;
+    const now = ac.currentTime;
+
+    if (tensionVoice) {
+      const voice = tensionVoice;
+      tensionVoice = null;
+      try {
+        voice.gain.gain.cancelScheduledValues(now);
+        voice.gain.gain.setValueAtTime(Math.max(0.0002, voice.gain.gain.value), now);
+        voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      } catch {
+        // Already silent.
+      }
+      for (const osc of voice.oscs) {
+        try {
+          osc.stop(now + 0.22);
+        } catch {
+          // Already stopped.
+        }
+      }
+      window.setTimeout(() => {
+        try {
+          voice.gain.disconnect();
+        } catch {
+          // Already torn down.
+        }
+      }, 600);
+    }
+
+    // The room breathes back in behind the landing chord and the reveal.
+    if (roomBed) {
+      try {
+        roomBed.gain.gain.cancelScheduledValues(now);
+        roomBed.gain.gain.setValueAtTime(Math.max(0.0002, roomBed.gain.gain.value), now);
+        // Sink a little further into the quiet, then breathe back in as the
+        // reward card appears.
+        roomBed.gain.gain.exponentialRampToValueAtTime(0.0014, now + 0.7);
+        roomBed.gain.gain.exponentialRampToValueAtTime(0.022, now + 2.1);
+      } catch {
+        // Suspended context; nothing to restore.
+      }
+    }
+  }
+
+  function stopRoomAmbience() {
+    endWheelTension();
+    window.clearTimeout(roomChimeTimer);
+    if (!roomBed) return;
+    const bed = roomBed;
+    roomBed = null;
+    const ac = audioCtx;
+    if (!ac) return;
+
+    const now = ac.currentTime;
+    try {
+      bed.gain.gain.cancelScheduledValues(now);
+      bed.gain.gain.setValueAtTime(Math.max(0.0002, bed.gain.gain.value), now);
+      bed.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+    } catch {
+      // A suspended context cannot be scheduled; the nodes will just idle.
+    }
+
+    for (const voice of bed.voices) {
+      try {
+        voice.stop(now + 0.6);
+      } catch {
+        // Already stopped.
+      }
+    }
+
+    window.setTimeout(() => {
+      try {
+        bed.gain.disconnect();
+        bed.sum.disconnect();
+      } catch {
+        // Already torn down.
+      }
+    }, 900);
+  }
+
+  function routeToBus(ac, node, pan, wet) {
+    let tail = node;
+    const amount = Number.isFinite(pan) ? pan : 0;
+    if (ac.createStereoPanner && Math.abs(amount) > 0.004) {
+      const panner = ac.createStereoPanner();
+      panner.pan.value = clamp(amount, -1, 1);
+      node.connect(panner);
+      tail = panner;
+    }
+
+    if (!audioBus) {
+      tail.connect(ac.destination);
+      return;
+    }
+
+    tail.connect(audioBus.master);
+    const send = Number.isFinite(wet) ? clamp(wet, 0, 1) : 0.1;
+    if (audioBus.reverb && send > 0) {
+      const sendGain = ac.createGain();
+      sendGain.gain.value = send;
+      tail.connect(sendGain).connect(audioBus.reverb);
+    }
+  }
+
+  function tone(frequency, duration, type, volume, slideTo, pan, delay, wet) {
+    const ac = ensureAudio();
+    if (!ac) return null;
+    const start = ac.currentTime + (delay || 0);
+    const oscillator = ac.createOscillator();
+    const gain = ac.createGain();
+
+    oscillator.type = type || "sine";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (slideTo) {
+      oscillator.frequency.exponentialRampToValueAtTime(
+        Math.max(24, slideTo),
+        start + duration
+      );
+    }
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    oscillator.connect(gain);
+    routeToBus(ac, gain, pan, wet);
+
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+    return oscillator;
+  }
+
+  // Pin hits are the bulk of the mix, so each one gets a little body:
+  // per-ball register, impact-driven brightness, and almost no reverb.
+  function pinVoice(ac, frequency, duration, volume, pan, cutoff) {
+    const start = ac.currentTime;
+    const oscillator = ac.createOscillator();
+    const filter = ac.createBiquadFilter();
+    const gain = ac.createGain();
+
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      Math.max(40, frequency * 0.93),
+      start + duration
+    );
+
+    filter.type = "lowpass";
+    filter.Q.value = 0.8;
+    filter.frequency.setValueAtTime(cutoff, start);
+    filter.frequency.exponentialRampToValueAtTime(
+      Math.max(420, cutoff * 0.4),
+      start + duration
+    );
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    oscillator.connect(filter).connect(gain);
+    routeToBus(ac, gain, pan, 0.045);
+
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+  }
+
+  function sfxPin(x, impact, chainHits, ball) {
+    const ac = ensureAudio();
+    if (!ac) return;
+
+    const pan = clamp((x / W) * 1.5 - 0.75, -0.86, 0.86);
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31];
+    const note = scale[Math.min(scale.length - 1, Math.floor(chainHits / 2))];
+    // Each ball sings in its own register (root / fifth / octave) so a burst of
+    // twelve does not collapse into one unison pitch.
+    const register = ball ? [0, 7, 12][ball.voice % 3] : 0;
+    const base = 220 * Math.pow(2, (note + register) / 12);
+    const frequency = base + Math.random() * 6 + clamp(impact, 0, 400) * 0.02;
+
+    const soft = 1 - Math.min(0.3, chainHits * 0.006);
+    const volume = (0.011 + Math.min(0.016, impact * 0.000055)) * soft;
+    const cutoff = 900 + Math.min(5600, impact * 15);
+    const duration = 0.045 + Math.min(0.03, impact * 0.00009) + Math.random() * 0.015;
+
+    pinVoice(ac, frequency, duration, volume, pan, cutoff);
+    if (impact > 250) {
+      pinVoice(ac, frequency * 2, duration * 0.8, volume * 0.3, pan, cutoff * 1.5);
+    }
+  }
+
+  function sfxGoldPin() {
+    tone(1060, 0.14, "sine", 0.026, 1420, 0);
+    tone(1590, 0.11, "triangle", 0.012, 1760, 0, 0.03);
+  }
+
+  function sfxChainUp(multiplier) {
+    const base = 440 * Math.pow(2, ((multiplier - 2) * 2) / 12);
+    tone(base, 0.12, "triangle", 0.024, base * 1.05);
+    tone(base * 1.5, 0.18, "sine", 0.017, base * 1.9, 0, 0.055);
+  }
+
+  function sfxTension() {
+    tone(92, 0.5, "sine", 0.023, 68);
+    tone(138, 0.36, "sine", 0.011, 102, 0, 0.11);
+    tone(660, 0.5, "triangle", 0.008, 880, 0, 0.05);
+
+    // A real riser: band-passed noise sweeping up under the slow motion, so the
+    // jackpot beat feels like it is being drawn out instead of just quieter.
+    const ac = ensureAudio();
+    if (!ac) return;
+    const start = ac.currentTime;
+    const noise = ac.createBufferSource();
+    noise.buffer = getNoiseBuffer(ac);
+
+    const band = ac.createBiquadFilter();
+    band.type = "bandpass";
+    band.Q.value = 1.3;
+    band.frequency.setValueAtTime(420, start);
+    band.frequency.exponentialRampToValueAtTime(3400, start + 0.6);
+
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.03, start + 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.68);
+
+    noise.connect(band).connect(gain);
+    routeToBus(ac, gain, 0, 0.22);
+
+    noise.start(start);
+    noise.stop(start + 0.72);
+  }
+
+  function sfxDrop(gold) {
+    if (gold) {
+      tone(530, 0.11, "sine", 0.028, 900);
+      tone(930, 0.15, "triangle", 0.018, 1320, 0, 0.08);
+    } else {
+      tone(180, 0.08, "sine", 0.025, 260);
+    }
+  }
+
+  function sfxPocket(value) {
+    const base = value >= 500 ? 392 : 330;
+    tone(base, 0.1, "triangle", 0.035, base * 1.3);
+    tone(base * 1.5, 0.17, "sine", 0.025, base * 2, 0, 0.07);
+  }
+
+  function sfxBonus() {
+    [523, 659, 784, 1046].forEach((frequency, index) => {
+      tone(frequency, 0.16, "triangle", 0.026, frequency * 1.03, 0, index * 0.075);
+    });
+  }
+
+  function sfxJackpot() {
+    const notes = [523, 659, 784, 1046, 1318, 1568, 2093];
+    notes.forEach((frequency, index) => {
+      tone(
+        frequency,
+        0.26,
+        index > 3 ? "sine" : "triangle",
+        0.033,
+        frequency * 1.015,
+        0,
+        index * 0.085,
+        0.3
+      );
+    });
+    tone(261, 0.7, "sine", 0.035, 262, 0, 0.1, 0.16);
+    tone(392, 0.8, "sine", 0.025, 394, 0, 0.12, 0.16);
+    tone(523, 0.9, "sine", 0.022, 526, 0, 0.14, 0.16);
+    // Sub thump under the chord: felt more than heard on small speakers.
+    tone(64, 0.42, "sine", 0.05, 42, 0, 0.01, 0);
+  }
+
+  function handleNovaSfx(detail) {
+    if (!detail || state.muted) return;
+
+    switch (detail.name) {
+      case "wheel-open":
+        tone(392, 0.11, "triangle", 0.03, 659);
+        tone(784, 0.2, "sine", 0.018, 1174, 0, 0.08);
+        startRoomAmbience();
+        break;
+      case "wheel-close":
+        tone(659, 0.08, "sine", 0.02, 392);
+        stopRoomAmbience();
+        break;
+      case "wheel-start":
+        tone(174, 0.34, "triangle", 0.018, 348);
+        tone(392, 0.22, "sine", 0.015, 784, 0, 0.14);
+        // The disc picking up speed: a soft band of air sweeping upward.
+        noiseSweep(260, 2700, 0.9, 0.011, 1.1, 0, 0.16);
+        break;
+      case "vault-tab":
+        // A page turning somewhere in the vault, not a UI beep.
+        tone(587, 0.07, "sine", 0.011, 784, 0, 0, 0.1);
+        tone(880, 0.12, "sine", 0.007, 1046, 0, 0.035, 0.18);
+        break;
+      case "wheel-tick": {
+        const progress = clamp(Number(detail.progress) || 0, 0, 1);
+        const pan = (Math.random() - 0.5) * 0.36;
+        // Fast rim ticks are high and quiet; as the wheel slows they drop in
+        // pitch and get louder, the way a real wheel's clicks do.
+        tone(
+          1060 - progress * 430 + Math.random() * 30,
+          0.014 + progress * 0.01,
+          "triangle",
+          0.0026 + progress * 0.004,
+          520,
+          pan,
+          0,
+          0.06
+        );
+        // A wooden body under the click so the pegs feel like they have weight.
+        tone(
+          196 - progress * 46 + Math.random() * 13,
+          0.02 + progress * 0.014,
+          "triangle",
+          0.0026 + progress * 0.0042,
+          130,
+          pan * 0.6,
+          0,
+          0.02
+        );
+        break;
+      }
+      case "wheel-tension":
+        startWheelTension();
+        break;
+      case "wheel-land":
+        // Cut the drone first so the landing chord arrives in the quiet it made.
+        endWheelTension();
+        tone(392, 0.16, "triangle", 0.03, 523);
+        tone(659, 0.26, "sine", 0.023, 988, 0, 0.08);
+        // The wheel settling into its pocket.
+        tone(96, 0.24, "sine", 0.02, 74, 0, 0, 0.08);
+        noiseSweep(1900, 420, 0.5, 0.007, 1.5, 0, 0.22);
+        break;
+      case "wheel-reveal":
+        sfxWheelReveal(Number(detail.rank) || 0);
+        // The reward card being set down on the table.
+        tone(150, 0.14, "sine", 0.016, 104, 0, 0.02, 0.06);
+        noiseSweep(900, 240, 0.26, 0.0055, 1.7, 0, 0.18);
+        break;
+      case "token-earned":
+        sfxTokenEarned();
+        break;
+      case "relic-equip":
+        tone(392, 0.1, "triangle", 0.025, 523);
+        tone(587, 0.16, "sine", 0.017, 784, 0, 0.06);
+        break;
+      case "spark-armed":
+        tone(523, 0.12, "triangle", 0.027, 784);
+        tone(784, 0.19, "sine", 0.02, 1046, 0, 0.07);
+        tone(1046, 0.26, "sine", 0.013, 1318, 0, 0.13);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function sfxWheelReveal(rank) {
+    const table = [
+      [330],
+      [392, 523],
+      [523, 659, 784],
+      [523, 659, 784, 1046, 1318],
+      [523, 659, 784, 1046, 1318, 1568, 2093]
+    ];
+    const notes = table[clamp(Math.floor(rank), 0, 4)];
+
+    const air = rank >= 4 ? 0.34 : rank >= 3 ? 0.2 : 0.09;
+    notes.forEach((frequency, index) => {
+      tone(
+        frequency,
+        rank >= 3 ? 0.28 : 0.16,
+        rank >= 3 ? "sine" : "triangle",
+        rank >= 3 ? 0.028 : 0.021,
+        frequency * 1.02,
+        0,
+        index * 0.068,
+        air
+      );
+    });
+
+    if (rank >= 3) {
+      tone(261, 0.55, "sine", 0.024, 262, 0, 0.08, air);
+      tone(392, 0.62, "sine", 0.018, 394, 0, 0.1, air);
+      // Weight underneath, so a rare pull feels like it has mass.
+      tone(65.4, 0.9, "sine", 0.032, 49, 0, 0.02, 0.12);
+      tone(196, 0.7, "sine", 0.014, 196, 0, 0.04, 0.2);
+    }
+
+    if (rank >= 4) {
+      tone(2637, 0.42, "sine", 0.012, 2637, 0, 0.22, air);
+      tone(1046, 0.9, "sine", 0.016, 1046, 0, 0.1, 0.4);
+
+      // A detuned choir that blooms under the arpeggio and keeps holding after
+      // it, so the moment has a floor instead of falling silent.
+      [261.63, 329.63, 392, 523.25].forEach((hz, index) => {
+        const delay = 0.04 + index * 0.03;
+        tone(hz, 2.1, "sine", 0.013, hz, 0, delay, 0.62);
+        tone(hz * 1.004, 1.9, "sine", 0.008, hz * 1.004, 0, delay + 0.02, 0.62);
+      });
+
+      // Shimmer sweeping up under the screen flash.
+      noiseSweep(1600, 7200, 1.1, 0.0065, 2.4, 0, 0.55);
+
+      // A cascade of tiny high notes falling like sparks.
+      for (let i = 0; i < 9; i++) {
+        const hz = 1568 * Math.pow(2, Math.random() * 1.5);
+        tone(
+          hz,
+          0.22 + Math.random() * 0.25,
+          "sine",
+          0.0035,
+          hz * 1.01,
+          (Math.random() - 0.5) * 0.7,
+          0.28 + i * 0.085,
+          0.6
+        );
+      }
+
+      // One more hit a beat later: the celebration keeps going instead of
+      // ending the instant the card appears.
+      window.setTimeout(() => {
+        tone(523.25, 0.5, "sine", 0.016, 523.25, 0, 0, 0.5);
+        tone(783.99, 0.55, "triangle", 0.011, 783.99, 0, 0.02, 0.5);
+        tone(1046.5, 0.7, "sine", 0.008, 1046.5, 0, 0.05, 0.55);
+      }, 380);
+    } else if (rank >= 3) {
+      // Legendary gets a short sparkle run and a breath of air, no encore.
+      for (let i = 0; i < 4; i++) {
+        const hz = 1318 * Math.pow(2, Math.random() * 0.9);
+        tone(
+          hz,
+          0.2,
+          "sine",
+          0.003,
+          hz * 1.01,
+          (Math.random() - 0.5) * 0.6,
+          0.12 + i * 0.07,
+          0.5
+        );
+      }
+      noiseSweep(1200, 4200, 0.7, 0.0045, 2, 0, 0.4);
+    }
+  }
+
+  function sfxTokenEarned() {
+    tone(1046, 0.09, "sine", 0.028, 1318);
+    tone(1318, 0.14, "triangle", 0.018, 1568, 0, 0.07);
+    tone(2093, 0.2, "sine", 0.01, 2093, 0, 0.14);
+  }
+
+  function sfxRunOver() {
+    tone(392, 0.2, "triangle", 0.025, 330);
+    tone(294, 0.28, "sine", 0.025, 247, 0, 0.16);
+    tone(196, 0.5, "sine", 0.022, 196, 0, 0.34);
+  }
+
+  function sfxReset() {
+    tone(392, 0.09, "triangle", 0.018, 523);
+    tone(523, 0.13, "sine", 0.018, 784, 0, 0.06);
+  }
+
+  function toggleSound() {
+    state.muted = !state.muted;
+    saveBoolean("nova-pachinko-muted-v1", state.muted);
+    updateSoundButton();
+
+    if (state.muted) {
+      // Suspend instead of just skipping new voices: reverb tails and any
+      // ringing chord stop immediately.
+      if (audioCtx && audioCtx.state === "running") {
+        audioCtx.suspend().catch(() => {});
+      }
+      return;
+    }
+
+    ensureAudio();
+    tone(620, 0.09, "sine", 0.025, 880);
+
+    // Muting suspends the whole graph, so the vault room tone has to be rebuilt
+    // if the sound comes back while the wheel is still open.
+    if (window.NovaWheel && window.NovaWheel.isOpen()) startRoomAmbience();
+  }
+
+  function updateSoundButton() {
+    ui.soundBtn.classList.toggle("muted", state.muted);
+    const label = state.muted ? "Unmute sound" : "Mute sound";
+    ui.soundBtn.setAttribute("aria-label", label);
+    ui.soundBtn.setAttribute("aria-pressed", String(state.muted));
+    ui.soundBtn.title = `${label} (M)`;
+  }
+
+  function hexToRgba(hex, alpha) {
+    const normalized = hex.replace("#", "");
+    const full = normalized.length === 3
+      ? normalized.split("").map((char) => char + char).join("")
+      : normalized;
+    const value = Number.parseInt(full, 16);
+    const r = (value >> 16) & 255;
+    const g = (value >> 8) & 255;
+    const b = value & 255;
+    return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+  }
+
+  function clamp(value, min, max) {
+    return value < min ? min : value > max ? max : value;
+  }
+
+  function loadNumber(key, fallback) {
+    try {
+      const value = Number(window.localStorage.getItem(key));
+      return Number.isFinite(value) && value >= 0 ? value : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function saveNumber(key, value) {
+    try {
+      window.localStorage.setItem(key, String(Math.round(value)));
+    } catch {
+      // Storage can be unavailable in private or file contexts.
+    }
+  }
+
+  function loadBoolean(key, fallback) {
+    try {
+      const value = window.localStorage.getItem(key);
+      if (value === "1") return true;
+      if (value === "0") return false;
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function saveBoolean(key, value) {
+    try {
+      window.localStorage.setItem(key, value ? "1" : "0");
+    } catch {
+      // Storage can be unavailable in private or file contexts.
+    }
+  }
+})();

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Nova Pachinko">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b1e42"/>
+      <stop offset="0.55" stop-color="#0a0e1f"/>
+      <stop offset="1" stop-color="#050811"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="46%" r="52%">
+      <stop offset="0" stop-color="#ff6f9f" stop-opacity="0.5"/>
+      <stop offset="0.45" stop-color="#7c58ff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#7c58ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="star" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#fff6df"/>
+      <stop offset="0.42" stop-color="#ffd07a"/>
+      <stop offset="1" stop-color="#f08a3c"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#halo)"/>
+
+  <g fill="#ffd07a">
+    <circle cx="256" cy="86" r="7" opacity="0.85"/>
+    <circle cx="376" cy="136" r="6" opacity="0.7"/>
+    <circle cx="426" cy="256" r="7" opacity="0.85"/>
+    <circle cx="376" cy="376" r="6" opacity="0.7"/>
+    <circle cx="256" cy="426" r="7" opacity="0.85"/>
+    <circle cx="136" cy="376" r="6" opacity="0.7"/>
+    <circle cx="86" cy="256" r="7" opacity="0.85"/>
+    <circle cx="136" cy="136" r="6" opacity="0.7"/>
+  </g>
+
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#ffc85e" stroke-opacity="0.16" stroke-width="10"/>
+
+  <path
+    d="M256 112 C268 200 312 244 400 256 C312 268 268 312 256 400 C244 312 200 268 112 256 C200 244 244 200 256 112 Z"
+    fill="#ffb37a"
+    opacity="0.55"
+    filter="url(#soft)"
+  />
+  <path
+    d="M256 112 C268 200 312 244 400 256 C312 268 268 312 256 400 C244 312 200 268 112 256 C200 244 244 200 256 112 Z"
+    fill="url(#star)"
+  />
+  <circle cx="256" cy="256" r="20" fill="#fff8e6" opacity="0.9"/>
+</svg>

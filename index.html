@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050811">
+  <meta name="description" content="Nova Pachinko — a neon physics pachinko game with a token-powered prize wheel and an 80-item vault collection.">
+  <title>Nova Pachinko — Board & Prize Wheel</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Nova Pachinko">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="wheel.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-orb ambient-orb-a"></span>
+    <span class="ambient-orb ambient-orb-b"></span>
+    <span class="ambient-orb ambient-orb-c"></span>
+  </div>
+
+  <main class="game-shell">
+    <aside class="hud" aria-label="Game status">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span>✦</span></div>
+        <button id="soundBtn" class="sound-btn" type="button" aria-label="Mute sound" aria-pressed="false" title="Sound (M)">
+          <svg class="sound-on" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
+            <path d="M16.2 8.6c1.2 1 1.9 2.2 1.9 3.5s-.7 2.6-1.9 3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M18.7 6.1c1.8 1.5 2.8 3.6 2.8 5.9s-1 4.4-2.8 5.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>
+          </svg>
+          <svg class="sound-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" opacity=".55"/>
+            <path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <header class="brand-copy">
+        <div class="kicker">NOVA ARCADE <span>·</span> CABINET 001</div>
+        <h1>PACHINKO</h1>
+        <p class="tagline">Drop. Bounce. Bank.</p>
+      </header>
+
+      <section class="score-panel panel" aria-label="Score">
+        <div class="label">SCORE</div>
+        <div id="score" class="score">0</div>
+        <div class="best-line">
+          <span>PERSONAL BEST</span>
+          <strong id="best">0</strong>
+        </div>
+      </section>
+
+      <div class="resource-row">
+        <div class="panel resource">
+          <span>BALLS</span>
+          <strong id="balls">12</strong>
+        </div>
+        <div class="panel resource">
+          <span>DROP</span>
+          <strong id="dropNumber">01</strong>
+        </div>
+      </div>
+
+      <section class="panel chain-panel" aria-label="Bounce chain">
+        <div class="chain-head">
+          <span>BOUNCE CHAIN</span>
+          <strong id="chainMult">×1</strong>
+        </div>
+        <div class="chain-track" aria-hidden="true">
+          <i id="chainFill"></i>
+          <span class="chain-ticks"><b></b><b></b><b></b><b></b></span>
+        </div>
+        <div class="chain-foot">
+          <span id="chainHits">READY</span>
+          <span id="chainRule">5 HITS = ×2</span>
+        </div>
+      </section>
+
+      <div id="luckyCard" class="lucky-card">
+        <span class="lucky-star" aria-hidden="true">✦</span>
+        <div>
+          <small>LUCKY BALL</small>
+          <strong id="luckyText">IN 4 DROPS</strong>
+        </div>
+        <span class="lucky-x">×2</span>
+      </div>
+
+      <button id="tokenBtn" class="token-card ready" type="button" aria-label="Open the Nova Prize Wheel. 1 token available.">
+        <span class="token-glyph" aria-hidden="true">✦</span>
+        <span class="token-copy">
+          <small>NOVA TOKEN</small>
+          <strong><span id="tokenCount">1</span> <em id="tokenWord">TOKEN</em></strong>
+        </span>
+        <span id="tokenCta" class="token-cta">SPIN <span aria-hidden="true">→</span></span>
+      </button>
+
+      <div class="actions">
+        <button id="dropBtn" class="drop-btn" type="button">
+          <span>DROP BALL</span>
+          <kbd>SPACE</kbd>
+        </button>
+        <button id="autoBtn" class="icon-btn auto-btn" type="button" aria-pressed="false" aria-label="Auto drop every ball" title="Auto drop every ball (A)">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 5.5 11 12l-7.5 6.5z" fill="currentColor"/>
+            <path d="M12.5 5.5 20 12l-7.5 6.5z" fill="currentColor" opacity=".6"/>
+          </svg>
+          <span>AUTO</span>
+        </button>
+        <button id="resetBtn" class="icon-btn" type="button" aria-label="Restart run" title="Restart run (R)">↺</button>
+      </div>
+
+      <p id="aimHint" class="hint">Move to aim <span>·</span> click the board to drop</p>
+      <div class="side-footer"><span id="runBallRule">12 BALLS / RUN</span><span>NO PURCHASE</span></div>
+    </aside>
+
+    <section class="stage" aria-label="Pachinko board">
+      <canvas id="gameCanvas" width="760" height="1060" role="img"
+        aria-label="A neon pachinko board with a field of metal pins and seven scoring slots along the bottom. The center slot is the jackpot."></canvas>
+
+      <div id="gameOver" class="overlay" aria-hidden="true">
+        <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="finalTitle">
+          <span class="overlay-kicker">RUN COMPLETE</span>
+          <h2 id="finalTitle">NICE DROP</h2>
+          <div id="finalScore" class="final-score">0</div>
+          <div class="final-meta">
+            <span>PERSONAL BEST <strong id="finalBest">0</strong></span>
+            <span id="newBest" class="new-best">NEW BEST</span>
+          </div>
+
+          <div class="run-report" aria-label="Run report">
+            <div class="run-stats">
+              <div class="run-stat"><span>JACKPOTS</span><strong id="runJackpots">0</strong></div>
+              <div class="run-stat"><span>TOKENS EARNED</span><strong id="runTokens">0</strong></div>
+              <div class="run-stat"><span>BEST CHAIN</span><strong id="runChain">×1</strong></div>
+            </div>
+            <div class="vault-report">
+              <div class="vault-report-head">
+                <span>VAULT PROGRESS</span>
+                <strong id="reportVault">0/80</strong>
+              </div>
+              <div class="vault-report-track"><i id="reportVaultFill"></i></div>
+              <p id="reportNext">START SPINNING TO BUILD YOUR VAULT</p>
+            </div>
+          </div>
+
+          <div class="overlay-actions">
+            <button id="againBtn" class="again-btn" type="button">PLAY AGAIN</button>
+            <button id="overlayVaultBtn" class="again-btn ghost" type="button">OPEN VAULT</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="corner-tag corner-tag-left" aria-hidden="true">PHYSICS · LIVE</div>
+      <div class="corner-tag corner-tag-right" aria-hidden="true">NOVA 001</div>
+    </section>
+  </main>
+
+  <section id="wheelMode" class="wheel-mode" aria-hidden="true">
+    <div id="rarityFlash" class="rarity-flash" aria-hidden="true"></div>
+    <div class="wheel-shell" role="dialog" aria-modal="true" aria-labelledby="wheelTitle">
+      <header class="wheel-head">
+        <div class="wheel-title-block">
+          <span class="wheel-eyebrow">NOVA VAULT <b>·</b> TOKEN DRAW</span>
+          <h2 id="wheelTitle">PRIZE WHEEL</h2>
+        </div>
+        <div class="wheel-token-pill" aria-label="Nova tokens available">
+          <span aria-hidden="true">✦</span>
+          <strong id="wheelTokenCount">1</strong>
+          <small id="wheelTokenWord">TOKENS</small>
+        </div>
+        <div class="wheel-dust-pill" aria-label="Nova Dust">
+          <span aria-hidden="true">✧</span>
+          <strong id="wheelDust">0</strong>
+          <small>DUST</small>
+        </div>
+        <button id="wheelClose" class="wheel-close" type="button" aria-label="Close prize wheel">×</button>
+      </header>
+
+      <nav class="wheel-tabs" role="tablist" aria-label="Prize wheel sections">
+        <button id="tabWheel" class="wheel-tab active" type="button" role="tab" aria-selected="true" aria-controls="wheelPanel">SPIN</button>
+        <button id="tabRelics" class="wheel-tab" type="button" role="tab" aria-selected="false" aria-controls="relicPanel">RELICS <span id="relicProgress">0/8</span></button>
+        <button id="tabVault" class="wheel-tab" type="button" role="tab" aria-selected="false" aria-controls="vaultPanel">VAULT <span id="vaultProgress">0/80</span></button>
+        <button id="tabPassport" class="wheel-tab" type="button" role="tab" aria-selected="false" aria-controls="passportPanel">PASSPORT</button>
+      </nav>
+
+      <div class="wheel-body">
+        <section id="wheelPanel" class="wheel-panel" role="tabpanel" aria-labelledby="tabWheel">
+          <div id="wheelStage" class="wheel-stage">
+            <canvas id="wheelCanvas" width="760" height="760" role="img" aria-label="Prize wheel with eight colored reward branches"></canvas>
+          </div>
+
+          <aside class="wheel-side">
+            <div class="wheel-intro">
+              <span class="wrapper-label">ONE TOKEN <b>·</b> ONE DRAW</span>
+              <h3>SPIN THE <em>FATES</em></h3>
+              <p id="wheelStatus" class="wheel-status" aria-live="polite">Eight branches. Five rarities. Eighty prizes.</p>
+            </div>
+
+            <div id="rewardCard" class="reward-card empty" aria-live="polite">
+              <div class="reward-glow" aria-hidden="true"></div>
+              <div class="reward-top">
+                <span id="rewardBranch">NOVA WHEEL</span>
+                <span id="rewardRarity">READY</span>
+              </div>
+              <div class="reward-main">
+                <span id="rewardSymbol" class="reward-symbol" aria-hidden="true">?</span>
+                <div class="reward-copy">
+                  <strong id="rewardName">SPIN TO REVEAL</strong>
+                  <p id="rewardDesc">Each branch holds ten placeholder prizes spread across the full rarity ladder.</p>
+                </div>
+              </div>
+              <div id="rewardBadge" class="reward-badge">0 / 80 COLLECTED</div>
+            </div>
+
+            <div id="rarityLadder" class="rarity-ladder" aria-label="Rarity ladder"></div>
+
+            <details class="odds-box">
+              <summary>
+                <span class="odds-title">FULL ODDS</span>
+                <span class="odds-summary">C 58 · R 25 · E 11 · L 5 · M 1</span>
+                <i aria-hidden="true">+</i>
+              </summary>
+              <div class="odds-body">
+                <div class="odds-row"><span>WHEEL BRANCH</span><strong>8 × 12.5%</strong></div>
+                <div class="odds-row"><span>RARITY ROLL</span><strong>C 58 · R 25 · E 11 · L 5 · M 1</strong></div>
+                <div class="odds-row"><span>ITEM IN BRANCH</span><strong>2 per rarity · 50 / 50</strong></div>
+                <div class="odds-row"><span>SPECIFIC ITEM</span><strong>12.5% × rarity × 50%</strong></div>
+                <div class="odds-row"><span>PITY ROLL</span><strong>E 82 · L 15 · M 3</strong></div>
+                <p class="odds-foot">A pity roll replaces the normal rarity roll on the 10th spin without Epic+. Token drops are physics-driven, not a fixed RNG rate.</p>
+              </div>
+            </details>
+
+            <div class="pity-block">
+              <div class="pity-row">
+                <span>EPIC+ GUARANTEE</span>
+                <strong id="pityText">IN 10 SPINS</strong>
+              </div>
+              <div class="pity-track"><i id="pityFill"></i></div>
+            </div>
+
+            <div class="spark-block">
+              <div class="spark-copy">
+                <span>EPIC+ SPARK</span>
+                <p>Force the next rarity roll into the Epic+ pool.</p>
+              </div>
+              <button id="sparkBtn" class="spark-btn" type="button">ARM · 75 DUST</button>
+            </div>
+
+            <button id="spinBtn" class="spin-btn" type="button">
+              <span id="spinBtnLabel">SPIN THE WHEEL</span>
+              <span id="spinCost" class="spin-cost">✦ 1</span>
+            </button>
+            <p class="wheel-note">Every pachinko jackpot mints one Nova Token.</p>
+          </aside>
+        </section>
+
+        <section id="vaultPanel" class="vault-panel" role="tabpanel" aria-labelledby="tabVault" hidden>
+          <header class="vault-head">
+            <div>
+              <span class="wrapper-label">COLLECTION</span>
+              <h3>THE NOVA VAULT</h3>
+            </div>
+            <div class="vault-total"><strong id="vaultFound">0</strong><span>/ <span id="vaultTotal">80</span></span></div>
+          </header>
+          <div id="vaultFilters" class="vault-filters" aria-label="Filter vault by branch"></div>
+          <p class="vault-hint">Click a discovered item to showcase it on your passport · <span id="showcaseCount">0/3</span></p>
+          <div id="vaultGrid" class="vault-grid"></div>
+          <p class="vault-note">PLACEHOLDER LOOT · SEASON 01 · 8 BRANCHES · 5 RARITIES</p>
+        </section>
+
+        <section id="relicPanel" class="relic-panel" role="tabpanel" aria-labelledby="tabRelics" hidden>
+          <header class="relic-head">
+            <div>
+              <span class="wrapper-label">SET REWARDS</span>
+              <h3>RELIC LOADOUT</h3>
+            </div>
+            <div class="relic-summary">
+              <span><strong id="relicUnlockedCount">0</strong> / 8 UNLOCKED</span>
+              <span><strong id="loadoutCount">0</strong> / 3 EQUIPPED</span>
+            </div>
+          </header>
+          <p class="relic-blurb">Complete all 10 items in a branch to unlock its relic. Equip up to three — effects apply to your next run.</p>
+          <div id="loadoutSlots" class="loadout-slots"></div>
+          <div id="relicGrid" class="relic-grid"></div>
+        </section>
+
+        <section id="passportPanel" class="passport-panel" role="tabpanel" aria-labelledby="tabPassport" hidden>
+          <header class="passport-head">
+            <div>
+              <span class="wrapper-label">COLLECTION IDENTITY</span>
+              <h3>NOVA PASSPORT</h3>
+            </div>
+            <div class="passport-actions">
+              <button id="sharePngBtn" class="passport-action-btn" type="button">DOWNLOAD PNG</button>
+              <button id="copyCodeBtn" class="passport-action-btn ghost" type="button">COPY CODE</button>
+            </div>
+          </header>
+
+          <div class="passport-layout">
+            <article id="passportCard" class="passport-card">
+              <div class="passport-card-top">
+                <span>NOVA VAULT · CABINET 001</span>
+                <span id="passportCompletion">0% COMPLETE</span>
+              </div>
+              <div class="passport-identity">
+                <span id="passportSymbol" class="passport-symbol">✦</span>
+                <div>
+                  <span class="passport-kicker">VAULT KEEPER</span>
+                  <h4 id="passportTitle">ROOKIE CURATOR</h4>
+                </div>
+                <div class="passport-power">
+                  <span>VAULT POWER</span>
+                  <strong id="passportPower">0</strong>
+                </div>
+              </div>
+              <div class="passport-stats">
+                <div><span>RELICS</span><strong id="passportFound">0/80</strong></div>
+                <div><span>RAREST</span><strong id="passportRarest">—</strong></div>
+                <div><span>BEST RUN</span><strong id="passportBest">0</strong></div>
+              </div>
+              <div class="passport-showcase-head"><span>SHOWCASE</span><span id="passportShowcaseCount">0/3</span></div>
+              <div id="passportShowcase" class="passport-showcase"></div>
+              <div class="passport-branches-head"><span>BRANCH PROGRESS</span><span id="passportRelics">0/8 RELICS</span></div>
+              <div id="passportBranches" class="passport-branches"></div>
+              <div class="passport-footer">
+                <span>NOVA ARCADE · COLLECTION PASSPORT</span>
+                <span id="passportCodeHint">NOVA1</span>
+              </div>
+            </article>
+
+            <aside class="passport-side">
+              <div class="passport-share">
+                <span class="wrapper-label">SHARE YOUR VAULT</span>
+                <p>Download a passport card for the group chat, or copy a code that a friend can paste into their own cabinet.</p>
+                <button id="copyCodeBtn2" class="passport-action-btn" type="button">COPY COLLECTION CODE</button>
+              </div>
+              <div class="passport-rival">
+                <span class="wrapper-label">FRIEND COMPARE</span>
+                <p>Paste a friend's Nova code to compare vaults.</p>
+                <textarea id="friendCode" placeholder="NOVA1.…"></textarea>
+                <button id="compareBtn" class="passport-action-btn ghost" type="button">COMPARE VAULTS</button>
+                <div id="compareResult" class="compare-result" hidden></div>
+              </div>
+              <p class="passport-hint">Click discovered items in the Vault to choose up to three showcase pieces.</p>
+            </aside>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <div id="gameToast" class="game-toast" role="status" aria-live="polite"></div>
+
+  <noscript>
+    <div class="noscript">Nova Pachinko needs JavaScript enabled to run.</div>
+  </noscript>
+  <div id="announcer" class="sr-only" aria-live="polite"></div>
+  <script src="game.js"></script>
+  <script src="wheel.js"></script>
+</body>
+</html>
