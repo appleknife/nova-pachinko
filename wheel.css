@@ -2575,256 +2575,447 @@
   }
 }
 
-/* Phone readability for the vault: same idea as the cabinet, one step up.
-   Size alone was not enough — the dim grey body copy stayed hard to read at
-   arm's length, so the supporting text also gets a lighter tone on phones
-   while the arcade labels keep their colour coding. */
+/* ── Reading text ─────────────────────────────────────────────────────────
+   The vault is a wall of small print: labels, counters, effect lines and a
+   couple of paragraphs of instructions per panel. The arcade styling that
+   makes the board read as a cabinet — 6-8px tracked capitals in dim slate —
+   reads as texture from across the room and as mush from arm's length, so
+   the reading type is set from one scale here instead of per component.
+
+   The lift is size and ink, not weight or width. The labels keep their
+   tracking (slightly tightened: tracking a 9px capital too far is what made
+   it dissolve), the sentences get a touch more weight because Bahnschrift at
+   400 goes thin below 12px, and every dim grey moves up to a tint that still
+   sits behind the cream names and the gold numbers, so the hierarchy is
+   intact — just legible.
+
+   This replaces the two earlier ad-hoc passes (phone first, then wide) with
+   one section, so a change here applies at every width. Everything below
+   outranks the component rules above it by source order, and state rules
+   (.active, .equipped, .locked, .armed) still win on specificity.
+   ──────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --fs-micro: 9px;      /* tracked capitals that label a thing */
+  --fs-label: 9.5px;    /* tracked capitals that carry information */
+  --fs-meta: 10px;      /* counters, percentages, monospaced values */
+  --fs-body: 11.5px;    /* sentences meant to be read */
+  --fs-name: 13.5px;    /* the item a card is about */
+  --ink-body: #c9cfe4;
+  --ink-label: #aab2cc;
+  --ink-meta: #9ca5c0;
+}
+
 @media (max-width: 860px) {
-  .reward-top,
-  .reward-badge,
-  .rarity-step {
-    font-size: 8.5px;
-    letter-spacing: 0.09em;
+  :root {
+    --fs-micro: 8.5px;
+    --fs-label: 9px;
+    --fs-meta: 9.5px;
+    --fs-body: 10.5px;
+    --fs-name: 12.5px;
+    --ink-body: #c3c9de;
+    --ink-label: #a4acc6;
+    --ink-meta: #98a1bc;
   }
+}
 
-  #rewardRarity {
-    font-size: 9px;
-  }
+/* ── Head, tabs, pills ─────────────────────────────────────────────────── */
 
-  .wheel-tab span {
-    font-size: 8.5px;
-  }
+.wheel-eyebrow,
+.wrapper-label {
+  color: #aab2cc;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.16em;
+}
 
-  .odds-box summary {
-    font-size: 9px;
-  }
+.wheel-eyebrow b,
+.wrapper-label b {
+  color: #ff8b96;
+}
 
+.wheel-tab {
+  color: #9aa3c6;
+  font-size: var(--fs-label);
+  letter-spacing: 0.13em;
+}
+
+.wheel-tab span {
+  color: #bfa57a;
+  font-size: var(--fs-micro);
+}
+
+.wheel-token-pill small,
+.wheel-dust-pill small {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.wheel-token-pill small {
+  color: #c3a97c;
+}
+
+.wheel-dust-pill small {
+  color: #b1a0c8;
+}
+
+/* ── The wheel's right-hand column ─────────────────────────────────────── */
+
+.wheel-status {
+  color: #b7bed5;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.reward-top {
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+#rewardRarity {
+  font-size: 9px;
+}
+
+.reward-copy p {
+  color: var(--ink-body);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.reward-badge {
+  color: #9da5be;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.rarity-step {
+  color: rgba(var(--r-rgb), 0.66);
+  font-size: 8px;
+}
+
+.odds-box summary {
+  color: #a6aec9;
+  font-size: 9.5px;
+}
+
+.odds-title,
+.odds-summary {
+  color: #adb5ce;
+}
+
+.odds-row {
+  color: #aeb6ce;
+  font-size: 9.5px;
+}
+
+.odds-row strong {
+  font-size: var(--fs-meta);
+}
+
+.odds-foot {
+  color: #a5adc6;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.pity-row {
+  color: #a2aac4;
+  font-size: 8.5px;
+  letter-spacing: 0.11em;
+}
+
+.pity-row strong {
+  font-size: 9.5px;
+}
+
+.spin-cost {
+  font-size: 8.5px;
+}
+
+.wheel-note {
+  color: #9ca4bf;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+}
+
+.spark-copy > span {
+  color: #b7a7d0;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+.spark-copy p {
+  color: var(--ink-body);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.spark-block.armed .spark-copy > span,
+.spark-block.armed .spark-copy p {
+  color: #e9cc96;
+}
+
+.spark-btn {
+  font-size: 8.5px;
+}
+
+.batch-row {
+  font-size: 10.5px;
+}
+
+.batch-rarity,
+.batch-row em {
+  font-size: 9px;
+}
+
+/* ── Vault ─────────────────────────────────────────────────────────────── */
+
+.vault-total {
+  color: #9aa3c0;
+  font-size: 12px;
+}
+
+.vault-filter {
+  color: #9da5c2;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.vault-hint {
+  color: #b0b8d0;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.vault-hint span {
+  color: #d2b98c;
+}
+
+.vc-name {
+  color: #ece7d8;
+  font-size: 12px;
+}
+
+.vault-card.locked .vc-name {
+  color: #c1c7da;
+}
+
+.vc-rarity,
+.vc-count {
+  font-size: 8.5px;
+}
+
+.vc-bottom {
+  color: #9aa3c0;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.vault-card.locked .vc-count {
+  color: #949cb8;
+}
+
+.vault-note {
+  color: #98a2be;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+}
+
+/* ── Relics ────────────────────────────────────────────────────────────── */
+
+.relic-summary {
+  color: #99a2bf;
+  font-size: 8.5px;
+}
+
+.relic-blurb {
+  color: #b7bed5;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.relic-name {
+  font-size: var(--fs-name);
+}
+
+/* A locked relic card used to be dimmed to half opacity, which is exactly
+   the card you read to decide whether to chase the set. The state line and
+   the progress bar carry "locked" instead. */
+.relic-card:disabled {
+  opacity: 0.86;
+  filter: saturate(0.72);
+}
+
+.relic-effect {
+  color: #bdc4da;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.relic-state {
+  color: #9ca4bf;
+  font-size: 8px;
+}
+
+.relic-progress-text {
+  color: #98a1bd;
+  font-size: 8.5px;
+}
+
+.loadout-slot-copy span {
+  color: #9ca4bf;
+  font-size: 8.5px;
+  letter-spacing: 0.11em;
+}
+
+.loadout-slot-copy strong {
+  font-size: 11px;
+}
+
+/* ── Passport card ─────────────────────────────────────────────────────── */
+
+.passport-card-top {
+  color: #b4abca;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+.passport-kicker {
+  color: #c2a9cf;
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+}
+
+.passport-power span {
+  color: #c1b4d2;
+  font-size: 8.5px;
+}
+
+.passport-stats span {
+  color: #b1b9d2;
+  font-size: 8.5px;
+}
+
+.passport-stats strong {
+  font-size: 10px;
+}
+
+.passport-showcase-head,
+.passport-branches-head {
+  color: #b0b8d0;
+  font-size: 8.5px;
+}
+
+.passport-showcase-head span:last-child,
+.passport-branches-head span:last-child {
+  color: #c3aa82;
+}
+
+.ps-copy strong {
+  font-size: 9px;
+}
+
+.ps-copy span {
+  font-size: 8px;
+}
+
+.passport-showcase-slot.empty .ps-copy strong {
+  color: #abb3cb;
+  font-size: 8px;
+  /* Three slots across a phone card are too narrow for this on one line, and
+     an ellipsis in a placeholder reads like a bug. */
+  white-space: normal;
+  line-height: 1.2;
+}
+
+.passport-branch {
+  color: #b7bfd7;
+  font-size: 8.5px;
+}
+
+.passport-branch span:last-child {
+  color: #d5bf9a;
+}
+
+.passport-footer {
+  color: #a9b2cd;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+}
+
+/* ── Passport share / friend compare ───────────────────────────────────── */
+
+.passport-action-btn {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.passport-share p,
+.passport-rival p {
+  color: var(--ink-body);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+#friendCode {
+  color: #d6d3e2;
+  font-size: 9px;
+}
+
+#friendCode::placeholder {
+  color: #8f97b3;
+}
+
+.compare-title {
+  font-size: 8.5px;
+}
+
+.compare-stat {
+  color: #b5bdd5;
+  font-size: 8.5px;
+}
+
+.compare-stat strong {
+  font-size: 9.5px;
+}
+
+.compare-diff {
+  color: #c3cae0;
+  font-size: 9.5px;
+}
+
+.spin-five-btn {
+  font-size: 11.5px;
+}
+
+.passport-hint {
+  color: #b1b9d1;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+/* ── Transient status ──────────────────────────────────────────────────── */
+
+.game-toast {
+  font-size: 10px;
+}
+
+@media (max-width: 860px) {
   .game-toast {
-    padding: 11px 16px;
     font-size: 9.5px;
-  }
-
-  /* Body copy: the vault's explanatory lines. */
-  .reward-copy p,
-  .spark-copy p {
-    font-size: 9.5px;
-    line-height: 1.45;
-    color: #c2c8df;
-  }
-
-  .reward-copy p {
-    -webkit-line-clamp: 3;
-  }
-
-  .relic-effect {
-    font-size: 9.5px;
-    line-height: 1.4;
-    color: #b4bad2;
-  }
-
-  .relic-blurb,
-  .vault-hint {
-    font-size: 9px;
-    color: #9aa1bb;
-  }
-
-  /* Vault cards are read at arm's length for a long time, so the card meta
-     gets the same lift as the HUD labels. */
-  .vc-rarity,
-  .vc-count {
-    font-size: 8.5px;
-  }
-
-  .vc-bottom {
-    font-size: 8.5px;
-    color: #9098b4;
-  }
-
-  .vault-note {
-    font-size: 8.5px;
-    color: #8f96b3;
-  }
-
-  .odds-row,
-  .odds-row strong {
-    font-size: 9.5px;
-  }
-
-  .odds-foot {
-    font-size: 8.5px;
-    color: #9aa1bc;
-  }
-
-  .spin-cost,
-  .pity-row,
-  .relic-state,
-  .relic-progress-text {
-    font-size: 8.5px;
-  }
-
-  .relic-progress-text {
-    color: #9098b4;
-  }
-
-  .loadout-slot-copy span,
-  .passport-power span,
-  .passport-stats span,
-  .passport-showcase-head,
-  .passport-branches-head,
-  .passport-branch,
-  .passport-footer,
-  .compare-stat {
-    font-size: 8.5px;
-  }
-
-  .ps-copy span,
-  .compare-diff,
-  .passport-hint,
-  .passport-kicker,
-  .passport-card-top,
-  .compare-title,
-  #friendCode {
-    font-size: 8.5px;
-  }
-
-  .passport-share p,
-  .passport-rival p {
-    font-size: 9.5px;
-    line-height: 1.5;
-  }
-
-  .batch-row {
-    font-size: 10px;
-  }
-
-  .batch-rarity,
-  .batch-row em {
-    font-size: 9px;
   }
 
   .spin-five-btn {
     font-size: 12px;
-    min-height: 48px;
   }
 
-  .passport-showcase-slot.empty .ps-copy strong {
-    font-size: 8px;
-    /* "CHOOSE IN VAULT" no longer fits on one line at this size, and an
-       ellipsis in a placeholder reads like a bug. */
-    white-space: normal;
-    line-height: 1.2;
-  }
-}
-
-/* Wide-layout readability: the same lift the phone layout gets, for the
-   maximised browser and the dedicated desktop window. */
-@media (min-width: 861px) {
-  .reward-top,
-  .reward-badge,
-  .rarity-step {
-    font-size: 8px;
-    letter-spacing: 0.09em;
-  }
-
-  #rewardRarity {
-    font-size: 8.5px;
-  }
-
-  .wheel-tab span {
-    font-size: 8.5px;
-  }
-
-  .odds-box summary {
-    font-size: 8.5px;
-  }
-
-  .game-toast {
-    font-size: 9px;
-  }
-
-  .reward-copy p,
-  .spark-copy p {
-    font-size: 9px;
-    line-height: 1.45;
-    color: #b9c0da;
-  }
-
-  .relic-effect {
-    font-size: 8.5px;
-    line-height: 1.4;
-    color: #aeb4cc;
-  }
-
-  .relic-blurb,
-  .vault-hint {
-    font-size: 8.5px;
-    color: #97a0ba;
-  }
-
-  .vc-rarity,
-  .vc-count {
-    font-size: 7.5px;
-  }
-
-  .vc-bottom {
-    font-size: 7.5px;
-    color: #8f97b4;
-  }
-
-  .vault-note {
-    font-size: 7.5px;
-    color: #8d95b2;
-  }
-
-  .odds-row,
-  .odds-row strong {
-    font-size: 9px;
-  }
-
-  .odds-foot {
-    font-size: 8px;
-    color: #98a0bb;
-  }
-
-  .spin-cost,
-  .pity-row,
-  .relic-state,
-  .relic-progress-text {
-    font-size: 8px;
-  }
-
-  .batch-row {
-    font-size: 9.5px;
-  }
-
-  .batch-rarity,
-  .batch-row em {
-    font-size: 8.5px;
-  }
-
-  .loadout-slot-copy span,
-  .passport-power span,
-  .passport-stats span,
-  .passport-showcase-head,
-  .passport-branches-head,
-  .passport-branch,
-  .passport-footer,
-  .compare-stat {
-    font-size: 8px;
-  }
-
-  .ps-copy span,
-  .compare-diff,
-  .passport-hint,
-  .passport-kicker,
-  .passport-card-top,
-  .compare-title,
-  #friendCode {
-    font-size: 8px;
-  }
-
-  .passport-share p,
-  .passport-rival p {
-    font-size: 8.5px;
+  /* The reward card has room for one more line at phone width, and a
+     description cut mid-sentence is worse than a slightly taller card. */
+  .reward-copy p {
+    -webkit-line-clamp: 3;
   }
 }

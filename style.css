@@ -1824,12 +1824,12 @@ h1 {
   .token-copy small,
   .token-cta,
   .best-line span {
-    font-size: 9px;
-    letter-spacing: 0.1em;
+    font-size: 9.5px;
+    letter-spacing: 0.09em;
   }
 
   .resource span {
-    font-size: 9.5px;
+    font-size: 10px;
     letter-spacing: 0.07em;
   }
 
@@ -1843,7 +1843,7 @@ h1 {
 
   .auto-btn span,
   .quality-btn span {
-    font-size: 8px;
+    font-size: 8.5px;
     letter-spacing: 0.04em;
   }
 
@@ -1852,27 +1852,27 @@ h1 {
   }
 
   .hint {
-    font-size: 9.5px;
+    font-size: 10px;
   }
 
   .lucky-card small,
   .run-stat span,
   .final-meta,
   .vault-report-head {
-    font-size: 8.5px;
+    font-size: 9px;
   }
 
   .side-footer,
   #reportNext {
-    font-size: 8px;
+    font-size: 8.5px;
   }
 
   .side-footer {
-    color: #6b7393;
+    color: #7f88a8;
   }
 
   .corner-tag {
-    font-size: 8px;
-    color: rgba(255, 245, 224, 0.4);
+    font-size: 8.5px;
+    color: rgba(255, 245, 224, 0.52);
   }
 }

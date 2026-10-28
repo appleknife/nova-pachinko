@@ -99,7 +99,8 @@ All sharing works locally; there is no account or server.
 ## On a phone
 
 - The layout is sized for a thumb, and double-tapping no longer zooms the page (pinch-zoom is still there when you want it).
-- The small arcade type in the HUD, the vault, the relic cards and the passport is raised at **every width** — the phone layout and the wide desktop layout both get 8-9.5px labels instead of 5.5-8px, and the dim grey supporting copy is lightened. A dedicated window is always wide, so the wide layout needed the same pass the phone got.
+- The vault's small print is set from one type scale instead of per component: labels 9-9.5px, counters 10px, sentences 11.5px, card names 12-13.5px, all a step smaller below 860px. The dim greys moved up two notches (sentences sit at `#c9cfe4` rather than a 40% slate), the sentences carry a little more weight because Bahnschrift goes thin below 12px, and the tracked capitals keep their tracking, slightly tightened — tracking a 9px capital too far is what made it dissolve. Locked relic cards are no longer dimmed to half opacity: that is exactly the card you read to decide whether to chase a set, so the state line and the progress bar carry "locked" instead.
+- The cabinet HUD gets the same treatment at both widths, and the phone layout no longer needs its own separate ramp: one section at the end of `wheel.css` and one at the end of `style.css` own the reading type, so a change lands everywhere at once.
 - Render resolution defaults to a capped 1.75× backing store on touch devices, with the **RES** button available if a device still stutters.
 
 ## Other rules
