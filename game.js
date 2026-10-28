@@ -2,8 +2,17 @@
   "use strict";
 
   const canvas = document.getElementById("gameCanvas");
-  let ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  // The board is drawn into this offscreen scene at whatever resolution the
+  // quality setting asks for, then blitted once into the visible canvas at its
+  // exact device resolution. Letting CSS stretch a smaller canvas instead is
+  // what puts a bright one-pixel seam down the middle of the board on iOS: the
+  // compositor resamples a bitmap whose size is not a whole multiple of the
+  // screen's pixels, and a column comes out doubled. One texture copy per frame
+  // removes the whole class of artifact.
+  const scene = document.createElement("canvas");
+  let ctx = scene.getContext("2d");
+  const present = canvas.getContext("2d");
+  if (!ctx || !present) return;
 
   const ui = {
     score: document.getElementById("score"),
@@ -200,6 +209,12 @@
 
   bindEvents();
   fitBacking();
+  // The visible canvas tracks its own CSS box, not just window resizes: the
+  // cabinet's size comes from a clamp() against the viewport and from whether
+  // the side panel sits beside or above the board.
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => fitPresent()).observe(canvas);
+  }
   updateSoundButton();
   updateVolumeUi();
   updateQualityUi();
@@ -458,8 +473,8 @@
     const next = clamp(scaleCap * quality, 0.55, scaleCap);
     if (Math.abs(next - backingScale) > 0.002) {
       backingScale = next;
-      canvas.width = Math.round(W * next);
-      canvas.height = Math.round(H * next);
+      scene.width = Math.round(W * next);
+      scene.height = Math.round(H * next);
       // Cached layers and gradients are baked at the old scale.
       layerScale = 0;
       glassOverlayLayer = null;
@@ -469,6 +484,21 @@
       scanlinePattern = null;
     }
     ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+    fitPresent();
+  }
+
+  // The visible canvas is always exactly its CSS box at device resolution, so
+  // the browser has nothing to resample: the only scaling left is the one blit
+  // below, which we control.
+  function fitPresent() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.round((rect.width > 4 ? rect.width : W) * dpr);
+    const height = Math.round((rect.height > 4 ? rect.height : H) * dpr);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
   }
 
   function updateQualityUi() {
@@ -1691,6 +1721,12 @@
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
+
+    // One blit from the scene to the screen. The canvas element is already at
+    // device resolution, so this is the only scaling that happens, and it is
+    // uniform — no seam, no doubled column, at any quality setting.
+    present.imageSmoothingEnabled = true;
+    present.drawImage(scene, 0, 0, canvas.width, canvas.height);
   }
 
   function drawCabinetBase() {
