@@ -150,8 +150,9 @@
     cinemaFired: false,
     // The scene plays once per run, even if a bonus ball extends the run.
     finalBallDone: false,
+    // The ball this run's scene belongs to, so it keeps playing to the landing.
+    sceneBall: null,
     tensionBall: null,
-    shake: 0,
     flash: 0,
     flashColor: C.gold,
     overTimer: 0,
@@ -604,7 +605,28 @@
     const balls = state.activeBalls;
     let target = 0;
 
+    // A scene already in progress keeps running until its ball lands. Latching
+    // the run must never cut the scene short — that was the bug that made the
+    // last ball barely slow down.
+    if (state.sceneBall) {
+      const ball = state.sceneBall;
+      if (
+        state.status === "playing" &&
+        !ball.captured &&
+        balls.indexOf(ball) >= 0
+      ) {
+        target = clamp((ball.y - 630) / 230, 0, 1);
+        if (target > 0) state.cinemaFocus = { x: ball.x, y: ball.y - 26 };
+      } else {
+        state.sceneBall = null;
+      }
+    }
+
+    // One scene per run: a bonus ball that extends the round must not start a
+    // second one for a later "last ball".
     if (
+      target === 0 &&
+      !state.sceneBall &&
       !state.finalBallDone &&
       state.status === "playing" &&
       state.ballsLeft === 0 &&
@@ -612,10 +634,13 @@
       !balls[0].captured
     ) {
       const ball = balls[0];
-      // Only the last stretch above the slots, so the scene is a flourish
-      // rather than ten extra seconds on every run.
-      target = clamp((ball.y - 630) / 230, 0, 1);
-      if (target > 0) state.cinemaFocus = { x: ball.x, y: ball.y - 26 };
+      const ramp = clamp((ball.y - 630) / 230, 0, 1);
+      if (ramp > 0) {
+        state.sceneBall = ball;
+        state.finalBallDone = true;
+        state.cinemaFocus = { x: ball.x, y: ball.y - 26 };
+        target = ramp;
+      }
     }
 
     if (REDUCED_MOTION) target = 0;
@@ -628,11 +653,8 @@
 
     if (state.cinema > 0.32 && !state.cinemaFired) {
       state.cinemaFired = true;
-      state.finalBallDone = true;
       sfxFinalBall();
       haptic(18);
-    } else if (state.cinema < 0.06) {
-      state.cinemaFired = false;
     }
 
     if (ui.finalChip) {
@@ -841,7 +863,6 @@
       if (impact > 60 && kickedAt - state.lastBumperSound > 55) {
         state.lastBumperSound = kickedAt;
         sfxBumper(impact, target);
-        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.4 : 1.7);
         spawnSparks(pin.x, pin.y, C.gold, 9, 1.5);
       }
     }
@@ -960,7 +981,6 @@
       }
 
       if (pin.gold) {
-        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.3 : 0.9);
         spawnSparks(pin.x, pin.y, C.gold, 5, 1.25);
         sfxGoldPin();
       }
@@ -1066,7 +1086,6 @@
     if (state.cinema > 0.2) sfxFinalLanding(slot);
 
     if (slot.jackpot) {
-      state.shake = Math.max(state.shake, REDUCED_MOTION ? 1.2 : 4.6);
       state.flash = REDUCED_MOTION ? 0.12 : 0.34;
       state.flashColor = C.gold;
       const tokensWon = 1 + bonuses.tokenBonus;
@@ -1078,7 +1097,6 @@
       flyTokenToHud(slot);
       haptic([0, 28, 36, 70]);
     } else if (slot.bonus) {
-      state.shake = Math.max(state.shake, 1.5);
       state.flash = 0.08;
       state.flashColor = C.violet;
       sfxBonus();
@@ -1169,7 +1187,6 @@
 
     if (gold) {
       spawnSparks(spawnX, spawnY, C.gold, 12, 1.15);
-      state.shake = Math.max(state.shake, 0.7);
     }
 
     updateHud(true);
@@ -1390,11 +1407,11 @@
     state.cinemaFocus = null;
     state.cinemaFired = false;
     state.finalBallDone = false;
+    state.sceneBall = null;
     if (ui.finalChip) {
       ui.finalChip.classList.remove("on");
       ui.finalChip.dataset.on = "false";
     }
-    state.shake = 0;
     state.flash = 0;
     state.overTimer = 0;
 
@@ -1497,8 +1514,6 @@
 
   function updateEffects(dt) {
     state.time += dt;
-    state.shake *= Math.exp(-7.5 * dt);
-    if (state.shake < 0.03) state.shake = 0;
     state.flash *= Math.exp(-7 * dt);
     if (state.flash < 0.003) state.flash = 0;
 
@@ -1609,11 +1624,7 @@
     ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    const shakeX = (Math.random() * 2 - 1) * state.shake;
-    const shakeY = (Math.random() * 2 - 1) * state.shake;
-
     ctx.save();
-    ctx.translate(shakeX, shakeY);
 
     buildCabinetLayers();
     ctx.drawImage(cabinetLayer, 0, 0, W, H);
