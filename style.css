@@ -1739,3 +1739,69 @@ h1 {
     color: rgba(255, 245, 224, 0.4);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Wide-layout readability. The phone ramp below 860px was the only place the
+   micro-type got a lift, so a maximised browser — and the dedicated desktop
+   window, which is always wide — still had 5.5-8px labels at arm's length.
+   Same treatment, same look, just legible.
+--------------------------------------------------------------------------- */
+@media (min-width: 861px) {
+  .score-panel .label,
+  .chain-head span,
+  .chain-foot,
+  .token-copy small,
+  .token-cta,
+  .best-line span {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  .resource span {
+    font-size: 9.5px;
+    letter-spacing: 0.07em;
+  }
+
+  .chain-head strong {
+    font-size: 14px;
+  }
+
+  .token-copy strong {
+    font-size: 15px;
+  }
+
+  .auto-btn span,
+  .quality-btn span {
+    font-size: 8px;
+    letter-spacing: 0.04em;
+  }
+
+  .drop-btn {
+    font-size: 12px;
+  }
+
+  .hint {
+    font-size: 9.5px;
+  }
+
+  .lucky-card small,
+  .run-stat span,
+  .final-meta,
+  .vault-report-head {
+    font-size: 8.5px;
+  }
+
+  .side-footer,
+  #reportNext {
+    font-size: 8px;
+  }
+
+  .side-footer {
+    color: #6b7393;
+  }
+
+  .corner-tag {
+    font-size: 8px;
+    color: rgba(255, 245, 224, 0.4);
+  }
+}

@@ -2715,3 +2715,116 @@
     line-height: 1.2;
   }
 }
+
+/* Wide-layout readability: the same lift the phone layout gets, for the
+   maximised browser and the dedicated desktop window. */
+@media (min-width: 861px) {
+  .reward-top,
+  .reward-badge,
+  .rarity-step {
+    font-size: 8px;
+    letter-spacing: 0.09em;
+  }
+
+  #rewardRarity {
+    font-size: 8.5px;
+  }
+
+  .wheel-tab span {
+    font-size: 8.5px;
+  }
+
+  .odds-box summary {
+    font-size: 8.5px;
+  }
+
+  .game-toast {
+    font-size: 9px;
+  }
+
+  .reward-copy p,
+  .spark-copy p {
+    font-size: 9px;
+    line-height: 1.45;
+    color: #b9c0da;
+  }
+
+  .relic-effect {
+    font-size: 8.5px;
+    line-height: 1.4;
+    color: #aeb4cc;
+  }
+
+  .relic-blurb,
+  .vault-hint {
+    font-size: 8.5px;
+    color: #97a0ba;
+  }
+
+  .vc-rarity,
+  .vc-count {
+    font-size: 7.5px;
+  }
+
+  .vc-bottom {
+    font-size: 7.5px;
+    color: #8f97b4;
+  }
+
+  .vault-note {
+    font-size: 7.5px;
+    color: #8d95b2;
+  }
+
+  .odds-row,
+  .odds-row strong {
+    font-size: 9px;
+  }
+
+  .odds-foot {
+    font-size: 8px;
+    color: #98a0bb;
+  }
+
+  .spin-cost,
+  .pity-row,
+  .relic-state,
+  .relic-progress-text {
+    font-size: 8px;
+  }
+
+  .batch-row {
+    font-size: 9.5px;
+  }
+
+  .batch-rarity,
+  .batch-row em {
+    font-size: 8.5px;
+  }
+
+  .loadout-slot-copy span,
+  .passport-power span,
+  .passport-stats span,
+  .passport-showcase-head,
+  .passport-branches-head,
+  .passport-branch,
+  .passport-footer,
+  .compare-stat {
+    font-size: 8px;
+  }
+
+  .ps-copy span,
+  .compare-diff,
+  .passport-hint,
+  .passport-kicker,
+  .passport-card-top,
+  .compare-title,
+  #friendCode {
+    font-size: 8px;
+  }
+
+  .passport-share p,
+  .passport-rival p {
+    font-size: 8.5px;
+  }
+}

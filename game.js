@@ -148,6 +148,8 @@
     cinema: 0,
     cinemaFocus: null,
     cinemaFired: false,
+    // The scene plays once per run, even if a bonus ball extends the run.
+    finalBallDone: false,
     tensionBall: null,
     shake: 0,
     flash: 0,
@@ -572,7 +574,7 @@
     // tease, and the two never stack into a freeze.
     let timeScale = slowMotion ? 0.34 : 1;
     if (state.cinema > 0.01) {
-      timeScale = Math.min(timeScale, 1 - 0.72 * state.cinema);
+      timeScale = Math.min(timeScale, 1 - 0.82 * state.cinema);
     }
 
     lastFrame = now;
@@ -603,6 +605,7 @@
     let target = 0;
 
     if (
+      !state.finalBallDone &&
       state.status === "playing" &&
       state.ballsLeft === 0 &&
       balls.length === 1 &&
@@ -611,7 +614,7 @@
       const ball = balls[0];
       // Only the last stretch above the slots, so the scene is a flourish
       // rather than ten extra seconds on every run.
-      target = clamp((ball.y - 660) / 200, 0, 1);
+      target = clamp((ball.y - 630) / 230, 0, 1);
       if (target > 0) state.cinemaFocus = { x: ball.x, y: ball.y - 26 };
     }
 
@@ -625,6 +628,7 @@
 
     if (state.cinema > 0.32 && !state.cinemaFired) {
       state.cinemaFired = true;
+      state.finalBallDone = true;
       sfxFinalBall();
       haptic(18);
     } else if (state.cinema < 0.06) {
@@ -837,7 +841,7 @@
       if (impact > 60 && kickedAt - state.lastBumperSound > 55) {
         state.lastBumperSound = kickedAt;
         sfxBumper(impact, target);
-        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.8 : 4.2);
+        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.4 : 1.7);
         spawnSparks(pin.x, pin.y, C.gold, 9, 1.5);
       }
     }
@@ -956,7 +960,7 @@
       }
 
       if (pin.gold) {
-        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.5 : 2.1);
+        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.3 : 0.9);
         spawnSparks(pin.x, pin.y, C.gold, 5, 1.25);
         sfxGoldPin();
       }
@@ -1057,8 +1061,12 @@
       );
     }
 
+    // The last ball of a run lands in front of the whole room, so it gets its
+    // own landing, scaled by what the slot is worth.
+    if (state.cinema > 0.2) sfxFinalLanding(slot);
+
     if (slot.jackpot) {
-      state.shake = Math.max(state.shake, REDUCED_MOTION ? 1.5 : 7);
+      state.shake = Math.max(state.shake, REDUCED_MOTION ? 1.2 : 4.6);
       state.flash = REDUCED_MOTION ? 0.12 : 0.34;
       state.flashColor = C.gold;
       const tokensWon = 1 + bonuses.tokenBonus;
@@ -1070,7 +1078,7 @@
       flyTokenToHud(slot);
       haptic([0, 28, 36, 70]);
     } else if (slot.bonus) {
-      state.shake = Math.max(state.shake, 2.4);
+      state.shake = Math.max(state.shake, 1.5);
       state.flash = 0.08;
       state.flashColor = C.violet;
       sfxBonus();
@@ -1161,7 +1169,7 @@
 
     if (gold) {
       spawnSparks(spawnX, spawnY, C.gold, 12, 1.15);
-      state.shake = Math.max(state.shake, 1.2);
+      state.shake = Math.max(state.shake, 0.7);
     }
 
     updateHud(true);
@@ -1381,6 +1389,7 @@
     state.cinema = 0;
     state.cinemaFocus = null;
     state.cinemaFired = false;
+    state.finalBallDone = false;
     if (ui.finalChip) {
       ui.finalChip.classList.remove("on");
       ui.finalChip.dataset.on = "false";
@@ -1611,7 +1620,7 @@
 
     // The cabinet stays put and the camera looks closer through the glass.
     if (state.cinema > 0.004 && state.cinemaFocus) {
-      const zoom = 1 + 0.26 * state.cinema;
+      const zoom = 1 + 0.38 * state.cinema;
       const fx = state.cinemaFocus.x;
       const fy = state.cinemaFocus.y;
       ctx.save();
@@ -1624,6 +1633,22 @@
       ctx.restore();
     } else {
       drawGlassContents(dt);
+    }
+
+    // The camera pushing in also pushes everything else back: a second
+    // vignette, stronger than the baked one, closes in while the scene runs.
+    if (state.cinema > 0.004) {
+      if (!vignetteGradient) {
+        vignetteGradient = ctx.createRadialGradient(W / 2, 455, 170, W / 2, 500, 590);
+        vignetteGradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+        vignetteGradient.addColorStop(0.66, "rgba(1, 3, 10, 0.08)");
+        vignetteGradient.addColorStop(1, "rgba(1, 3, 10, 0.62)");
+      }
+      ctx.save();
+      ctx.globalAlpha = state.cinema * 0.85;
+      ctx.fillStyle = vignetteGradient;
+      ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+      ctx.restore();
     }
 
     ctx.restore();
@@ -3215,6 +3240,48 @@
 
   // The last ball of a run: the room notices. A low swell, two heartbeats and
   // a held fifth, gone quiet enough that the landing chord still has room.
+  // A landing worth watching. The last ball already has four times the screen
+  // time, so the sound has to carry four times the weight: a deep "it's down"
+  // thud for every slot, then a phrase that scales with what the slot pays.
+  function sfxFinalLanding(slot) {
+    const jackpot = !!slot.jackpot;
+    const bonus = !!slot.bonus;
+    const value = Number(slot.value) || 0;
+
+    // The ball settling into the pocket.
+    tone(74, 0.55, "sine", 0.055, 52, 0, 0, 0.28);
+    tone(112, 0.3, "sine", 0.03, 86, 0, 0.02, 0.2);
+
+    if (jackpot) {
+      // A small fanfare: the gold chord from the jackpot, stretched out.
+      [261.63, 329.63, 392, 523.25, 659.25].forEach((hz, index) => {
+        tone(hz, 1.3, "sine", 0.03, hz, 0, 0.08 + index * 0.07, 0.62);
+      });
+      tone(65.4, 1.7, "sine", 0.036, 49, 0, 0, 0.4);
+      tone(1046.5, 0.9, "sine", 0.014, 1046.5, 0, 0.34, 0.6);
+      noiseSweep(900, 5400, 1, 0.0045, 2.3, 0, 0.55);
+      haptic([0, 34, 40, 90]);
+    } else if (bonus) {
+      // Bonus ball: bright, forward, promising more.
+      [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((hz, index) => {
+        tone(hz, 0.5, "triangle", 0.026, hz, 0, 0.05 + index * 0.075, 0.4);
+      });
+      haptic([0, 18, 24, 36]);
+    } else if (value >= 500) {
+      [392, 523.25, 659.25, 784].forEach((hz, index) => {
+        tone(hz, 0.6, "sine", 0.028, hz, 0, 0.04 + index * 0.08, 0.42);
+      });
+      tone(98, 0.7, "sine", 0.02, 82, 0, 0, 0.3);
+      haptic(22);
+    } else {
+      // The small slots still get a settled two-note answer, not a boop.
+      tone(293.66, 0.45, "sine", 0.026, 293.66, 0, 0.06, 0.34);
+      tone(440, 0.6, "sine", 0.02, 440, 0, 0.16, 0.4);
+      tone(146.83, 0.5, "sine", 0.018, 130, 0, 0, 0.25);
+      haptic(14);
+    }
+  }
+
   function sfxFinalBall() {
     tone(65.4, 1.7, "sine", 0.03, 61.7, 0, 0, 0.45);
     tone(98, 1.5, "sine", 0.017, 92.5, 0, 0.05, 0.45);
