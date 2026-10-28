@@ -19,7 +19,8 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - **Aim** by moving the pointer over the board.
 - **Drop** with a click/tap on the board, the **Drop Ball** button, or **Space**.
 - **Auto** **(A)** toggles auto drop: every remaining ball drops in a rapid stream, then the next run keeps going on its own. While it is on, the chute sweeps steadily across the board so the burst spreads over every slot instead of stacking in one lane, and the pointer stops steering the aim until you switch auto off.
-- **R** restarts a run. **M** toggles sound. **Q** cycles render quality: **auto → high → low**.
+- **R** restarts a run. **M** toggles sound.
+- **Render resolution** cycles **auto → high → low** with the gauge button next to restart (or **Q** on a keyboard). It is remembered between visits. Auto is the right choice for almost everyone; use **low** if a device still stutters, **high** if your GPU has headroom and you want maximum sharpness.
 - Every run starts with 12 balls by default. The board has a guarded center jackpot, two bonus-ball slots, and chain multipliers for pin hits. Relics can alter the starting count, chain cadence, lucky-ball cadence, score, bonus slots, and jackpot token payout.
 - Every fifth ball is gold and doubles its final payout by default.
 
@@ -167,7 +168,7 @@ The pachinko simulation runs at a fixed 240 Hz step, independent of display refr
 
 Lighting is a single additive pass (`globalCompositeOperation = "lighter"`) over the board: pocket wells, the jackpot tower, the rail chase, ball halos, pin blooms, and the glass reflection all draw cached radial-gradient and band sprites instead of building gradients every frame, so roughly ninety light blits per frame stay cheap.
 
-Performance is budgeted per device. The canvas backing store is capped (1.75× on touch devices, 2× on desktop) and an adaptive controller measures frame times: if frames run long it steps the render scale down, and once there is headroom it creeps back up. **Q** overrides that guess (auto → high → low, remembered between sessions) for machines where the automatic choice is wrong. The cabinet, glass glare, trim, and the scanline texture are baked once and blitted, and every static gradient is cached, so a frame is just the playfield, the balls, and the additive light pass.
+Performance is budgeted per device. The canvas backing store is capped (1.75× on touch devices, 2× on desktop) and an adaptive controller measures frame times: if frames run long it steps the render scale down, and once there is headroom it creeps back up. The **RES** button (or **Q**) overrides that guess (auto → high → low, remembered between sessions) for machines where the automatic choice is wrong. The cabinet, glass glare, trim, and the scanline texture are baked once and blitted, and every static gradient is cached, so a frame is just the playfield, the balls, and the additive light pass.
 
 Just as important, nothing expensive is left in CSS on an animating layer: the cabinet shadow is a `box-shadow` rather than a `drop-shadow` filter, the background orbs are soft gradients rather than a blurred container, and the vault overlay uses a dense tint instead of `backdrop-filter`. Those three were the main cause of frame drops in Safari and on phones, because each one forces a full-screen blur or filter pass every frame. Per-ball and per-pin canvas shadows are gone too; the cached glow sprites do that work.
 

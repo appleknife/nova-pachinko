@@ -36,7 +36,9 @@
     reportVaultFill: document.getElementById("reportVaultFill"),
     reportNext: document.getElementById("reportNext"),
     announcer: document.getElementById("announcer"),
-    gameToast: document.getElementById("gameToast")
+    gameToast: document.getElementById("gameToast"),
+    qualityBtn: document.getElementById("qualityBtn"),
+    qualityLabel: document.getElementById("qualityLabel")
   };
 
   const W = 760;
@@ -179,6 +181,7 @@
   bindEvents();
   fitBacking();
   updateSoundButton();
+  updateQualityUi();
   updateAutoButton();
   updateHud(true);
   requestAnimationFrame(frame);
@@ -306,6 +309,13 @@
       ui.resetBtn.blur();
     });
 
+    if (ui.qualityBtn) {
+      ui.qualityBtn.addEventListener("click", () => {
+        setQualityMode((qualityMode + 1) % 3);
+        ui.qualityBtn.blur();
+      });
+    }
+
     ui.againBtn.addEventListener("click", () => {
       resetGame();
       ui.againBtn.blur();
@@ -384,6 +394,17 @@
     ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
   }
 
+  function updateQualityUi() {
+    if (!ui.qualityBtn || !ui.qualityLabel) return;
+    const names = ["AUTO", "HIGH", "LOW"];
+    ui.qualityLabel.textContent = `RES ${names[qualityMode]}`;
+    ui.qualityBtn.classList.toggle("low", qualityMode === 2);
+    ui.qualityBtn.setAttribute(
+      "aria-label",
+      `Render resolution: ${names[qualityMode].toLowerCase()}. Activate to change.`
+    );
+  }
+
   // Rolling frame budget: drop resolution when frames run long, creep back up
   // when there is headroom again. This is what keeps a slow phone smooth rather
   // than pretty-but-janky.
@@ -422,7 +443,8 @@
     slowFrames = 0;
     fastFrames = 0;
     fitBacking();
-    showGameToast(`QUALITY · ${["AUTO", "HIGH", "LOW"][qualityMode]}`);
+    updateQualityUi();
+    showGameToast(`RESOLUTION · ${["AUTO", "HIGH", "LOW"][qualityMode]}`);
   }
 
   let toastTimer = 0;
