@@ -1,0 +1,36 @@
+NOVA PACHINKO — WINDOWS DESKTOP VERSION
+=======================================
+
+1. Extract this whole folder somewhere first (right-click the zip -> Extract All).
+   Don't run it from inside the zip preview.
+
+2. Double-click  "Nova Pachinko.cmd".
+
+   If Windows shows "Windows protected your PC", click "More info" and then
+   "Run anyway". That warning is just because the file came from the internet;
+   the launcher only opens the game in a Chrome/Edge app window.
+
+3. That's it. The game opens in its own window, with no browser tabs or toolbar.
+
+Needs Google Chrome or Microsoft Edge (either one will do). If neither is
+installed, double-click index.html instead - same game, just in a normal tab.
+
+
+WANT AN ICON ON YOUR DESKTOP?
+-----------------------------
+Right-click "Nova Pachinko.cmd" -> Send to -> Desktop (create shortcut).
+Then right-click that shortcut -> Properties -> Change Icon... -> pick icon.ico
+from this folder.
+
+LOWER FRAME RATE ON A 4K / SCALED MONITOR?
+------------------------------------------
+Right-click the shortcut -> Properties, and add a space plus  smooth  to the end
+of the Target box, so it reads:   "...\Nova Pachinko.cmd" smooth
+That renders at 1x pixel scale: less sharp, noticeably faster.
+
+
+YOUR COLLECTION
+---------------
+Progress is saved by this app in its own profile, separate from the browser
+version at appleknife.github.io. Use the Passport tab to get a collection code
+or a PNG card, which is how you compare collections with someone else.

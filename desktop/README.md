@@ -43,6 +43,39 @@ or smooth mode above, not a rewrite.
 The launcher finds `index.html` whether it sits beside it or one folder up, so a
 copy in the project root works the same way.
 
+## Sending it to a friend
+
+Double-click **`PackForSharing.cmd`**. It writes **`NovaPachinko-Windows.zip`**
+next to the game — about 225 KB — containing only what the desktop version
+needs: the game files, `audio/bump.js`, the icons, the launcher renamed to
+`Nova Pachinko.cmd` at the top of the folder, and a `START HERE.txt`. No `.git`,
+no preview images, no docs.
+
+What to tell them:
+
+1. **Extract the zip first.** Running `index.html` from inside the zip preview
+   behaves differently in different browsers.
+2. **Double-click `Nova Pachinko.cmd`.**
+3. If Windows shows *Windows protected your PC*, it's because the file arrived
+   from the internet: **More info → Run anyway**. The launcher only starts a
+   Chrome/Edge app window on the local `index.html`.
+
+Things worth knowing before you send it:
+
+- **Chrome or Edge is required** for the app window — whichever is installed.
+  Without either, the friend can still open `index.html` in a normal tab.
+- **Chat and mail apps are wary of `.cmd` attachments.** A zip on Drive, Dropbox,
+  Discord or a GitHub release link goes through cleanly; Gmail and some chat
+  clients may refuse or warn. If a friend can't receive it, send the hosted link
+  instead (<https://appleknife.github.io/nova-pachinko/>) or paste this zip
+  somewhere they can download it.
+- **Their progress stays separate.** The desktop build keeps its own profile in
+  `%LOCALAPPDATA%\NovaPachinko`, so their collection is not the one in the hosted
+  page, and it does not travel inside the folder. The Passport tab's collection
+  code is how they compare with someone.
+- **Nothing to install.** There is no setup, no registry entry and no service;
+  deleting the folder removes it entirely (the profile above is the only leftover).
+
 ## Saves
 
 The launcher uses its own Chrome profile in `%LOCALAPPDATA%\NovaPachinko`, which

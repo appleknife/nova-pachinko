@@ -210,4 +210,5 @@ The game pauses its physics while the wheel overlay is open, then resumes the ex
 - `preview-passport.png` — exported collection passport example
 - `audio/bump.js` — the gold bumper hit, trimmed and embedded as a data URI (works from `file://` in the desktop window, where fetching local files is blocked)
 - `desktop/NovaPachinko.cmd` — opens the game in a dedicated app window (no browser chrome, no throttling; `smooth` argument renders at 1× pixel scale)
-- `desktop/README.md` — what the launcher changes, and an honest note on frame rate
+- `desktop/PackForSharing.cmd` — builds `NovaPachinko-Windows.zip` (about 225 KB) with just the files a friend needs, the launcher at the top level, and a `START HERE` page
+- `desktop/README.md` — what the launcher changes, how to hand the desktop build to someone else, and an honest note on frame rate
