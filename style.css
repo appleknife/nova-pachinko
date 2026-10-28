@@ -62,10 +62,11 @@ body::after {
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  opacity: 0.16;
   background-image: radial-gradient(rgba(255, 255, 255, 0.28) 0.45px, transparent 0.7px);
   background-size: 4px 4px;
-  mix-blend-mode: soft-light;
+  /* A full-screen blend mode forces the compositor to redo this layer every
+     frame. Plain alpha looks the same and is free. */
+  opacity: 0.045;
 }
 
 .ambient {
@@ -73,42 +74,46 @@ body::after {
   inset: -15%;
   z-index: 0;
   pointer-events: none;
-  filter: blur(80px);
+  /* No filter here: a blurred container with animating children has to be
+     re-blurred every frame, which is brutal on phone GPUs. Soft gradients give
+     the same look for free. */
+  contain: layout paint;
 }
 
 .ambient-orb {
   position: absolute;
   display: block;
   border-radius: 50%;
-  opacity: 0.18;
+  opacity: 0.55;
   animation: drift 18s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
 .ambient-orb-a {
-  width: 34vw;
-  height: 34vw;
-  left: 6%;
-  top: 4%;
-  background: #6845ff;
+  width: 56vw;
+  height: 56vw;
+  left: -4%;
+  top: -10%;
+  background: radial-gradient(circle, rgba(104, 69, 255, 0.3), rgba(104, 69, 255, 0.09) 45%, rgba(104, 69, 255, 0) 72%);
 }
 
 .ambient-orb-b {
-  width: 28vw;
-  height: 28vw;
-  right: 4%;
-  bottom: 2%;
-  background: #ff405c;
+  width: 50vw;
+  height: 50vw;
+  right: -4%;
+  bottom: -12%;
+  background: radial-gradient(circle, rgba(255, 64, 92, 0.22), rgba(255, 64, 92, 0.06) 45%, rgba(255, 64, 92, 0) 72%);
   animation-delay: -7s;
   animation-duration: 23s;
 }
 
 .ambient-orb-c {
-  width: 24vw;
-  height: 24vw;
-  right: 20%;
-  top: 26%;
-  background: #00d7c4;
-  opacity: 0.08;
+  width: 40vw;
+  height: 40vw;
+  right: 14%;
+  top: 16%;
+  background: radial-gradient(circle, rgba(0, 215, 196, 0.16), rgba(0, 215, 196, 0.045) 45%, rgba(0, 215, 196, 0) 72%);
+  opacity: 0.4;
   animation-delay: -12s;
   animation-duration: 27s;
 }
@@ -855,7 +860,6 @@ h1 {
     1040px
   );
   aspect-ratio: 760 / 1060;
-  filter: drop-shadow(0 36px 54px rgba(0, 0, 0, 0.62));
 }
 
 #gameCanvas {
@@ -863,6 +867,9 @@ h1 {
   width: 100%;
   height: 100%;
   border-radius: 36px;
+  /* box-shadow instead of filter: drop-shadow — a CSS filter on a canvas that
+     repaints every frame means a full-resolution blur pass per frame. */
+  box-shadow: 0 36px 54px rgba(0, 0, 0, 0.62), 0 8px 18px rgba(0, 0, 0, 0.35);
   cursor: crosshair;
   touch-action: none;
   outline: none;

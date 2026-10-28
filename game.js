@@ -2,7 +2,7 @@
   "use strict";
 
   const canvas = document.getElementById("gameCanvas");
-  const ctx = canvas.getContext("2d");
+  let ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   const ui = {
@@ -156,6 +156,17 @@
   let tensionVoice = null;
   let tensionTimer = 0;
   let backingScale = 0;
+  let scaleCap = 0;
+  let quality = 1;
+  let slowFrames = 0;
+  let fastFrames = 0;
+  let layerScale = 0;
+  let cabinetBaseLayer = null;
+  let cabinetTopLayer = null;
+  let glassBgGradient = null;
+  let glassGlowGradient = null;
+  let vignetteGradient = null;
+  let scanlinePattern = null;
   let lastFrame = performance.now();
   let accumulator = 0;
   let chainFillWidth = "";
@@ -338,14 +349,85 @@
     state.aimX = clamp(point.x, PLAY.left + margin, PLAY.right - margin);
   }
 
+  // Phones report DPR 3. Drawing a 3x backing store means four times the pixels
+  // for detail nobody can see on a 6-inch screen, which is exactly where mobile
+  // GPUs start dropping frames. The cap is the visual budget; `quality` is the
+  // runtime escape hatch that drops resolution further if frames stay slow.
+  function deviceScaleCap() {
+    const dpr = window.devicePixelRatio || 1;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    return clamp(coarse ? Math.min(dpr, 1.75) : Math.min(dpr, 2), 1, 2);
+  }
+
   function fitBacking() {
-    const dpr = clamp(window.devicePixelRatio || 1, 1, 2.25);
-    if (Math.abs(dpr - backingScale) > 0.001) {
-      backingScale = dpr;
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
+    scaleCap = deviceScaleCap();
+    const next = clamp(scaleCap * quality, 0.85, scaleCap);
+    if (Math.abs(next - backingScale) > 0.002) {
+      backingScale = next;
+      canvas.width = Math.round(W * next);
+      canvas.height = Math.round(H * next);
+      // Cached layers and gradients are baked at the old scale.
+      layerScale = 0;
+      glassBgGradient = null;
+      glassGlowGradient = null;
+      vignetteGradient = null;
+      scanlinePattern = null;
     }
     ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+  }
+
+  // Rolling frame budget: drop resolution when frames run long, creep back up
+  // when there is headroom again. This is what keeps a slow phone smooth rather
+  // than pretty-but-janky.
+  function trackQuality(rawMs) {
+    if (!(rawMs > 0) || rawMs > 300) return;
+
+    if (rawMs > 21) {
+      slowFrames += 1;
+      fastFrames = 0;
+    } else if (rawMs < 12.6) {
+      fastFrames += 1;
+      if (slowFrames > 0) slowFrames -= 1;
+    } else {
+      slowFrames = Math.max(0, slowFrames - 1);
+      fastFrames = 0;
+    }
+
+    if (slowFrames >= 36 && quality > 0.64) {
+      quality = Math.max(0.64, quality - 0.16);
+      slowFrames = 0;
+      fitBacking();
+    } else if (fastFrames >= 240 && quality < 1) {
+      quality = Math.min(1, quality + 0.1);
+      fastFrames = 0;
+      fitBacking();
+    }
+  }
+
+  // The cabinet, the glass glare and the trim never change between frames, so
+  // they are baked once into two layers: one behind the playfield, one on top.
+  function buildCabinetLayers() {
+    if (cabinetBaseLayer && layerScale === backingScale) return;
+    layerScale = backingScale;
+
+    const makeLayer = (paint) => {
+      const layer = document.createElement("canvas");
+      layer.width = Math.max(1, Math.round(W * backingScale));
+      layer.height = Math.max(1, Math.round(H * backingScale));
+      const target = layer.getContext("2d");
+      const previous = ctx;
+      ctx = target;
+      ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+      paint();
+      ctx = previous;
+      return layer;
+    };
+
+    cabinetBaseLayer = makeLayer(drawCabinetBase);
+    cabinetTopLayer = makeLayer(() => {
+      drawGlassOverlay();
+      drawCabinetDetails();
+    });
   }
 
   function frame(now) {
@@ -356,6 +438,7 @@
       return;
     }
 
+    trackQuality(now - lastFrame);
     const dt = clamp((now - lastFrame) / 1000, 0, 0.05);
     const slowMotion = state.slowMo > 0;
     const timeScale = slowMotion ? 0.34 : 1;
@@ -1292,10 +1375,10 @@
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    drawCabinetBase();
+    buildCabinetLayers();
+    ctx.drawImage(cabinetBaseLayer, 0, 0, W, H);
     drawGlassContents(dt);
-    drawGlassOverlay();
-    drawCabinetDetails();
+    ctx.drawImage(cabinetTopLayer, 0, 0, W, H);
 
     ctx.restore();
 
@@ -1368,18 +1451,22 @@
     roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
     ctx.clip();
 
-    const bg = ctx.createLinearGradient(0, GLASS.y, 0, GLASS.y + GLASS.h);
-    bg.addColorStop(0, "#0b1226");
-    bg.addColorStop(0.45, "#070c1a");
-    bg.addColorStop(1, "#090b17");
-    ctx.fillStyle = bg;
+    if (!glassBgGradient) {
+      glassBgGradient = ctx.createLinearGradient(0, GLASS.y, 0, GLASS.y + GLASS.h);
+      glassBgGradient.addColorStop(0, "#0b1226");
+      glassBgGradient.addColorStop(0.45, "#070c1a");
+      glassBgGradient.addColorStop(1, "#090b17");
+    }
+    ctx.fillStyle = glassBgGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
 
-    const glow = ctx.createRadialGradient(380, 470, 20, 380, 500, 470);
-    glow.addColorStop(0, "rgba(100, 74, 255, 0.14)");
-    glow.addColorStop(0.45, "rgba(60, 48, 160, 0.045)");
-    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = glow;
+    if (!glassGlowGradient) {
+      glassGlowGradient = ctx.createRadialGradient(380, 470, 20, 380, 500, 470);
+      glassGlowGradient.addColorStop(0, "rgba(100, 74, 255, 0.14)");
+      glassGlowGradient.addColorStop(0.45, "rgba(60, 48, 160, 0.045)");
+      glassGlowGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+    }
+    ctx.fillStyle = glassGlowGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
 
     drawStarField();
@@ -1455,9 +1542,12 @@
 
   function drawTopChute() {
     ctx.save();
-    const topGradient = ctx.createLinearGradient(0, GLASS.y, 0, PLAY.top + 40);
-    topGradient.addColorStop(0, "rgba(23, 31, 62, 0.9)");
-    topGradient.addColorStop(1, "rgba(8, 12, 25, 0)");
+    const topGradient = cachedGradient("chute", () => {
+      const paint = ctx.createLinearGradient(0, GLASS.y, 0, PLAY.top + 40);
+      paint.addColorStop(0, "rgba(23, 31, 62, 0.9)");
+      paint.addColorStop(1, "rgba(8, 12, 25, 0)");
+      return paint;
+    });
     ctx.fillStyle = topGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, 92);
 
@@ -1486,9 +1576,12 @@
 
     ctx.save();
 
-    const beam = ctx.createLinearGradient(0, 138, 0, 234);
-    beam.addColorStop(0, hexToRgba(C.cyan, 0.12));
-    beam.addColorStop(1, hexToRgba(C.cyan, 0));
+    const beam = cachedGradient("aim", () => {
+      const paint = ctx.createLinearGradient(0, 138, 0, 234);
+      paint.addColorStop(0, hexToRgba(C.cyan, 0.12));
+      paint.addColorStop(1, hexToRgba(C.cyan, 0));
+      return paint;
+    });
     ctx.fillStyle = beam;
     ctx.fillRect(x - 18, 138, 36, 96);
 
@@ -1554,13 +1647,29 @@
     ctx.restore();
   }
 
+  // Gradients are immutable once built, so anything that does not depend on
+  // frame state is built once and reused instead of allocated 60 times a second.
+  const gradientCache = new Map();
+
+  function cachedGradient(key, make) {
+    let gradient = gradientCache.get(key);
+    if (!gradient) {
+      gradient = make();
+      gradientCache.set(key, gradient);
+    }
+    return gradient;
+  }
+
   function drawSlots() {
     ctx.save();
     for (const slot of slots) {
-      const gradient = ctx.createLinearGradient(0, SLOT_TOP, 0, SLOT_BOTTOM);
-      gradient.addColorStop(0, hexToRgba(slot.color, 0.14));
-      gradient.addColorStop(0.5, hexToRgba(slot.color, 0.045));
-      gradient.addColorStop(1, hexToRgba(slot.color, 0.01));
+      const gradient = cachedGradient(`slot:${slot.x}`, () => {
+        const paint = ctx.createLinearGradient(0, SLOT_TOP, 0, SLOT_BOTTOM);
+        paint.addColorStop(0, hexToRgba(slot.color, 0.14));
+        paint.addColorStop(0.5, hexToRgba(slot.color, 0.045));
+        paint.addColorStop(1, hexToRgba(slot.color, 0.01));
+        return paint;
+      });
       ctx.fillStyle = gradient;
       ctx.fillRect(slot.x + 1, SLOT_TOP, slot.w - 2, SLOT_BOTTOM - SLOT_TOP);
 
@@ -1624,10 +1733,13 @@
 
   function drawSideRails() {
     ctx.save();
-    const left = ctx.createLinearGradient(0, 136, 0, SLOT_TOP);
-    left.addColorStop(0, "rgba(255, 238, 204, 0.45)");
-    left.addColorStop(0.45, "rgba(77, 245, 221, 0.18)");
-    left.addColorStop(1, "rgba(77, 245, 221, 0.04)");
+    const left = cachedGradient("rails", () => {
+      const paint = ctx.createLinearGradient(0, 136, 0, SLOT_TOP);
+      paint.addColorStop(0, "rgba(255, 238, 204, 0.45)");
+      paint.addColorStop(0.45, "rgba(77, 245, 221, 0.18)");
+      paint.addColorStop(1, "rgba(77, 245, 221, 0.04)");
+      return paint;
+    });
     ctx.strokeStyle = left;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1665,9 +1777,6 @@
       if (pin.gold) {
         const pulse = 0.55 + Math.sin(state.time * 2.2 + pin.id) * 0.12;
         ctx.save();
-        ctx.shadowColor = hexToRgba(C.gold, 0.55);
-        ctx.shadowBlur = 12 + pulse * 8 + glow * 18;
-
         const body = ctx.createRadialGradient(
           pin.x - pin.r * 0.34,
           pin.y - pin.r * 0.4,
@@ -1786,9 +1895,8 @@
       ctx.fill();
     }
 
-    ctx.shadowColor = ball.gold ? "rgba(255, 191, 92, 0.8)" : "rgba(77, 245, 221, 0.55)";
-    ctx.shadowBlur = ball.gold ? 17 : 11;
-
+    // No canvas shadow here: a per-ball shadowBlur is a blur pass per ball per
+    // frame. The additive halo in drawLights does the same job with one blit.
     const body = ctx.createRadialGradient(
       ball.x - ball.r * 0.34,
       ball.y - ball.r * 0.42,
@@ -1855,11 +1963,14 @@
       ctx.lineTo(divider.x, divider.y2);
       ctx.stroke();
 
-      const metal = ctx.createLinearGradient(0, divider.y1, 0, divider.y2);
-      metal.addColorStop(0, "#f5e4c4");
-      metal.addColorStop(0.15, "#a49bb5");
-      metal.addColorStop(0.65, "#4a4563");
-      metal.addColorStop(1, "#24233c");
+      const metal = cachedGradient(`divider:${divider.y1}:${divider.y2}`, () => {
+        const paint = ctx.createLinearGradient(0, divider.y1, 0, divider.y2);
+        paint.addColorStop(0, "#f5e4c4");
+        paint.addColorStop(0.15, "#a49bb5");
+        paint.addColorStop(0.65, "#4a4563");
+        paint.addColorStop(1, "#24233c");
+        return paint;
+      });
       ctx.strokeStyle = metal;
       ctx.lineWidth = 5;
       ctx.beginPath();
@@ -2054,13 +2165,20 @@
 
     for (const ball of state.activeBalls) {
       const speed = Math.hypot(ball.vx, ball.vy);
-      const halo = clamp(0.1 + speed / 2500, 0.1, 0.44) * ball.alpha;
+      const halo = clamp(0.16 + speed / 2300, 0.16, 0.52) * ball.alpha;
       lightGlow(ball.x, ball.y, 58, 58, ball.gold ? C.gold : C.cyan, halo);
     }
 
     for (const pin of pins) {
-      if (pin.flash <= 0.02) continue;
-      lightGlow(pin.x, pin.y, 46, 46, pin.gold ? C.gold : C.cyan, pin.flash * 0.4);
+      if (pin.flash > 0.02) {
+        lightGlow(pin.x, pin.y, 46, 46, pin.gold ? C.gold : C.cyan, pin.flash * 0.4);
+      }
+      if (pin.gold) {
+        // Gold pins used to glow with a canvas shadow on every pin, every frame.
+        // A cached sprite is the same halo for one cheap blit.
+        const shimmer = 0.6 + Math.sin(t * 2.2 + pin.id) * 0.18;
+        lightGlow(pin.x, pin.y, 32, 32, C.gold, 0.16 * shimmer * dim);
+      }
     }
 
     ctx.restore();
@@ -2085,22 +2203,32 @@
     ctx.restore();
   }
 
+  // One tiled pattern instead of ~215 separate fillRect calls per frame.
   function drawScanlines() {
-    ctx.save();
-    ctx.globalAlpha = 0.035;
-    ctx.fillStyle = "#bdeee8";
-    for (let y = GLASS.y + 2; y < SLOT_BOTTOM; y += 4) {
-      ctx.fillRect(GLASS.x, y, GLASS.w, 1);
+    if (!scanlinePattern) {
+      const strip = document.createElement("canvas");
+      strip.width = 4;
+      strip.height = 4;
+      const paint = strip.getContext("2d");
+      paint.fillStyle = "rgba(189, 238, 232, 0.035)";
+      paint.fillRect(0, 1, 4, 1);
+      scanlinePattern = ctx.createPattern(strip, "repeat");
     }
+    if (!scanlinePattern) return;
+    ctx.save();
+    ctx.fillStyle = scanlinePattern;
+    ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, SLOT_BOTTOM - GLASS.y);
     ctx.restore();
   }
 
   function drawVignette() {
-    const vignette = ctx.createRadialGradient(W / 2, 455, 170, W / 2, 500, 590);
-    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-    vignette.addColorStop(0.66, "rgba(1, 3, 10, 0.08)");
-    vignette.addColorStop(1, "rgba(1, 3, 10, 0.62)");
-    ctx.fillStyle = vignette;
+    if (!vignetteGradient) {
+      vignetteGradient = ctx.createRadialGradient(W / 2, 455, 170, W / 2, 500, 590);
+      vignetteGradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+      vignetteGradient.addColorStop(0.66, "rgba(1, 3, 10, 0.08)");
+      vignetteGradient.addColorStop(1, "rgba(1, 3, 10, 0.62)");
+    }
+    ctx.fillStyle = vignetteGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
   }
 

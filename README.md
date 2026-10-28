@@ -167,6 +167,10 @@ The pachinko simulation runs at a fixed 240 Hz step, independent of display refr
 
 Lighting is a single additive pass (`globalCompositeOperation = "lighter"`) over the board: pocket wells, the jackpot tower, the rail chase, ball halos, pin blooms, and the glass reflection all draw cached radial-gradient and band sprites instead of building gradients every frame, so roughly ninety light blits per frame stay cheap.
 
+Performance is budgeted per device. The canvas backing store is capped (1.75× on touch devices, 2× on desktop) and an adaptive controller measures frame times: if frames run long it steps the render scale down, and once there is headroom it creeps back up. The cabinet, glass glare, trim, and the scanline texture are baked once and blitted, and every static gradient is cached, so a frame is just the playfield, the balls, and the additive light pass.
+
+Just as important, nothing expensive is left in CSS on an animating layer: the cabinet shadow is a `box-shadow` rather than a `drop-shadow` filter, the background orbs are soft gradients rather than a blurred container, and the vault overlay uses a dense tint instead of `backdrop-filter`. Those three were the main cause of frame drops in Safari and on phones, because each one forces a full-screen blur or filter pass every frame. Per-ball and per-pin canvas shadows are gone too; the cached glow sprites do that work.
+
 The wheel's room tone is a small set of long-lived oscillators (a detuned low pad through a low-pass, one slow LFO, and a filtered noise loop) started when the vault opens and faded out when it closes, so it costs nothing while the board is being played.
 
 The prize wheel is drawn to a device-pixel-ratio-aware canvas, with a decelerating spin computed from the target wedge and eased over time. The vault and gacha data are plain JavaScript objects; all sound is synthesized with the Web Audio API.

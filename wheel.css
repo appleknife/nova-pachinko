@@ -8,9 +8,9 @@
   padding: 20px;
   background:
     radial-gradient(circle at 50% 35%, rgba(117, 83, 255, 0.16), transparent 34%),
-    rgba(2, 4, 10, 0.88);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+    rgba(2, 4, 10, 0.955);
+  /* No backdrop-filter: blurring the live board behind the overlay costs a
+     full-screen blur every frame on Safari. A denser tint reads the same. */
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -324,7 +324,7 @@
   height: 100%;
   border-radius: 50%;
   cursor: default;
-  filter: drop-shadow(0 22px 32px rgba(0, 0, 0, 0.46));
+  box-shadow: 0 22px 32px rgba(0, 0, 0, 0.46);
 }
 
 .wheel-side {

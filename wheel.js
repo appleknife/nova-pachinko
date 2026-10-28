@@ -529,6 +529,56 @@
   const wheelCtx = el.wheelCanvas.getContext("2d");
   if (!wheelCtx) return;
 
+  // The disc's gradients never change, so they are built once instead of twelve
+  // times per frame. They are defined in the disc's local space, which is why
+  // the wedge gradients start at 0,0.
+  let wheelGradients = null;
+
+  function ensureWheelGradients(ctx) {
+    if (wheelGradients) return wheelGradients;
+
+    const cx = WHEEL_SIZE / 2;
+    const cy = WHEEL_SIZE / 2;
+
+    const outer = ctx.createRadialGradient(cx, cy, 110, cx, cy, 382);
+    outer.addColorStop(0, "rgba(93, 61, 210, 0.12)");
+    outer.addColorStop(0.64, "rgba(82, 53, 180, 0.06)");
+    outer.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+    const rim = ctx.createLinearGradient(cx - 300, cy - 340, cx + 300, cy + 340);
+    rim.addColorStop(0, "#3b3555");
+    rim.addColorStop(0.22, "#171a2f");
+    rim.addColorStop(0.55, "#080b17");
+    rim.addColorStop(0.82, "#28223c");
+    rim.addColorStop(1, "#51415a");
+
+    const wedges = BRANCHES.map((branch) => {
+      const fill = ctx.createRadialGradient(0, 0, 65, 0, 0, WHEEL_RADIUS);
+      fill.addColorStop(0, `rgba(${branch.rgb}, 0.15)`);
+      fill.addColorStop(0.58, `rgba(${branch.rgb}, 0.58)`);
+      fill.addColorStop(0.9, `rgba(${branch.rgb}, 0.9)`);
+      fill.addColorStop(1, `rgba(${branch.rgb}, 0.66)`);
+      return fill;
+    });
+
+    const hubGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 115);
+    hubGlow.addColorStop(0, "rgba(118, 78, 255, 0.2)");
+    hubGlow.addColorStop(1, "rgba(118, 78, 255, 0)");
+
+    const hub = ctx.createRadialGradient(cx - 28, cy - 34, 8, cx, cy, 100);
+    hub.addColorStop(0, "#242349");
+    hub.addColorStop(0.54, "#11152b");
+    hub.addColorStop(1, "#070a15");
+
+    const pointer = ctx.createLinearGradient(cx, 28, cx, 82);
+    pointer.addColorStop(0, "#fff0bc");
+    pointer.addColorStop(0.45, "#ffc85e");
+    pointer.addColorStop(1, "#d58334");
+
+    wheelGradients = { outer, rim, wedges, hubGlow, hub, pointer };
+    return wheelGradients;
+  }
+
   const vaultCards = new Map();
   const vaultFilters = new Map();
 
@@ -2357,11 +2407,17 @@
   }
 
   function fitWheelCanvas() {
-    const dpr = clamp(window.devicePixelRatio || 1, 1, 2.25);
+    const deviceDpr = window.devicePixelRatio || 1;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    // The disc is mostly large colour fields and big labels, so it holds up at a
+    // lower backing scale than the board, and it fills the screen with several
+    // full-canvas passes per frame.
+    const dpr = clamp(coarse ? Math.min(deviceDpr, 1.6) : Math.min(deviceDpr, 2), 1, 2);
     if (Math.abs(dpr - wheel.scale) > 0.001) {
       wheel.scale = dpr;
       el.wheelCanvas.width = Math.round(WHEEL_SIZE * dpr);
       el.wheelCanvas.height = Math.round(WHEEL_SIZE * dpr);
+      wheelGradients = null;
     }
     wheelCtx.setTransform(wheel.scale, 0, 0, wheel.scale, 0, 0);
   }
@@ -2377,11 +2433,8 @@
     const segment = TAU / BRANCHES.length;
     const angle = wheel.angle;
 
-    const outerGlow = ctx.createRadialGradient(cx, cy, 110, cx, cy, 382);
-    outerGlow.addColorStop(0, "rgba(93, 61, 210, 0.12)");
-    outerGlow.addColorStop(0.64, "rgba(82, 53, 180, 0.06)");
-    outerGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = outerGlow;
+    const grads = ensureWheelGradients(ctx);
+    ctx.fillStyle = grads.outer;
     ctx.fillRect(0, 0, WHEEL_SIZE, WHEEL_SIZE);
 
     const seconds = REDUCED_MOTION ? 0 : now * 0.001;
@@ -2411,13 +2464,7 @@
 
     ctx.beginPath();
     ctx.arc(cx, cy, 352, 0, TAU);
-    const rimGradient = ctx.createLinearGradient(cx - 300, cy - 340, cx + 300, cy + 340);
-    rimGradient.addColorStop(0, "#3b3555");
-    rimGradient.addColorStop(0.22, "#171a2f");
-    rimGradient.addColorStop(0.55, "#080b17");
-    rimGradient.addColorStop(0.82, "#28223c");
-    rimGradient.addColorStop(1, "#51415a");
-    ctx.fillStyle = rimGradient;
+    ctx.fillStyle = grads.rim;
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 232, 191, 0.28)";
     ctx.lineWidth = 1.2;
@@ -2487,12 +2534,7 @@
       ctx.arc(0, 0, WHEEL_RADIUS, start, end);
       ctx.closePath();
 
-      const fill = ctx.createRadialGradient(0, 0, 65, 0, 0, WHEEL_RADIUS);
-      fill.addColorStop(0, `rgba(${branch.rgb}, 0.15)`);
-      fill.addColorStop(0.58, `rgba(${branch.rgb}, 0.58)`);
-      fill.addColorStop(0.9, `rgba(${branch.rgb}, 0.9)`);
-      fill.addColorStop(1, `rgba(${branch.rgb}, 0.66)`);
-      ctx.fillStyle = fill;
+      ctx.fillStyle = grads.wedges[i];
       ctx.fill();
 
       if (i % 2 === 0) {
@@ -2584,21 +2626,14 @@
     ctx.drawImage(discLampSprite(), 0, 0, WHEEL_SIZE, WHEEL_SIZE);
     ctx.restore();
 
-    const hubGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 115);
-    hubGlow.addColorStop(0, "rgba(118, 78, 255, 0.2)");
-    hubGlow.addColorStop(1, "rgba(118, 78, 255, 0)");
-    ctx.fillStyle = hubGlow;
+    ctx.fillStyle = grads.hubGlow;
     ctx.beginPath();
     ctx.arc(cx, cy, 115, 0, TAU);
     ctx.fill();
 
     ctx.beginPath();
     ctx.arc(cx, cy, 96, 0, TAU);
-    const hub = ctx.createRadialGradient(cx - 28, cy - 34, 8, cx, cy, 100);
-    hub.addColorStop(0, "#242349");
-    hub.addColorStop(0.54, "#11152b");
-    hub.addColorStop(1, "#070a15");
-    ctx.fillStyle = hub;
+    ctx.fillStyle = grads.hub;
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 220, 153, 0.55)";
     ctx.lineWidth = 1.6;
@@ -2627,11 +2662,7 @@
     ctx.fillStyle = "rgba(226, 204, 174, 0.55)";
     drawSpacedText(ctx, "TOKEN WHEEL", cx, cy + 27, 1.7);
 
-    const pointerGradient = ctx.createLinearGradient(cx, 28, cx, 82);
-    pointerGradient.addColorStop(0, "#fff0bc");
-    pointerGradient.addColorStop(0.45, "#ffc85e");
-    pointerGradient.addColorStop(1, "#d58334");
-    ctx.fillStyle = pointerGradient;
+    ctx.fillStyle = grads.pointer;
     ctx.shadowColor = "rgba(255, 189, 71, 0.72)";
     ctx.shadowBlur = 18;
     ctx.beginPath();
