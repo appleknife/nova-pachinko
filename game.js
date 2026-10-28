@@ -2796,6 +2796,7 @@
         audioCtx = new AudioContextCtor();
       }
       if (!audioBus) audioBus = buildAudioBus(audioCtx);
+      loadBumperSample(audioCtx);
       if (audioCtx.state === "suspended") {
         audioCtx.resume().catch(() => {});
       }
@@ -3119,6 +3120,55 @@
     }, 900);
   }
 
+  // The gold bumper hit is a real recorded sample (trimmed from the supplied
+  // wav and embedded in audio/bump.js so it also loads from file://). The
+  // synthesised mallet stays as the fallback for the moment before the buffer
+  // is decoded, or if the file is missing.
+  let bumperSample = null;
+  let bumperLoading = false;
+
+  function loadBumperSample(ac) {
+    if (bumperSample || bumperLoading || !window.NOVA_BUMP_SAMPLE) return;
+    bumperLoading = true;
+    try {
+      const base64 = window.NOVA_BUMP_SAMPLE.split(",")[1] || "";
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      ac.decodeAudioData(
+        bytes.buffer,
+        (decoded) => {
+          bumperSample = decoded;
+          bumperLoading = false;
+        },
+        () => {
+          bumperLoading = false;
+        }
+      );
+    } catch {
+      bumperLoading = false;
+    }
+  }
+
+  function playBumperSample(power, pan, wet) {
+    const ac = audioCtx;
+    if (!ac || !bumperSample) return false;
+    const src = ac.createBufferSource();
+    src.buffer = bumperSample;
+    // A touch of pitch/rate variation per hit so repeats do not machine-gun,
+    // and the size of the hit is audible as well as visible.
+    src.playbackRate.value = 0.93 + power * 0.17 + (Math.random() - 0.5) * 0.04;
+
+    const gain = ac.createGain();
+    // The sample is peak-normalised to -6 dBFS; this keeps it the loudest board
+    // event without swallowing the pin notes underneath it.
+    gain.gain.value = 0.34 + power * 0.22;
+    src.connect(gain);
+    routeToBus(ac, gain, pan, wet);
+    src.start(ac.currentTime);
+    return true;
+  }
+
   function routeToBus(ac, node, pan, wet) {
     let tail = node;
     const amount = Number.isFinite(pan) ? pan : 0;
@@ -3241,12 +3291,16 @@
   // still sounds like a room and not a warning.
   function sfxBumper(impact, launchSpeed) {
     const power = clamp((launchSpeed || impact) / 1300, 0.4, 1);
+    const pan = (Math.random() - 0.5) * 0.3;
+
+    if (playBumperSample(power, pan, 0.14)) return;
+
     const base = 392 + power * 132; // G4 up towards B4 as the hit gets harder
-    tone(base, 0.2, "sine", 0.03, base * 1.004, 0, 0, 0.18);
-    tone(base * 2, 0.1, "sine", 0.011, base * 2, 0, 0.004, 0.12);
-    tone(base * 3, 0.06, "sine", 0.004, base * 3, 0, 0.008, 0.1);
+    tone(base, 0.2, "sine", 0.03, base * 1.004, pan, 0, 0.18);
+    tone(base * 2, 0.1, "sine", 0.011, base * 2, pan, 0.004, 0.12);
+    tone(base * 3, 0.06, "sine", 0.004, base * 3, pan, 0.008, 0.1);
     // The pin taking the hit: a soft wooden tick with no air under it.
-    tone(150, 0.085, "triangle", 0.013, 118, 0, 0, 0.04);
+    tone(150, 0.085, "triangle", 0.013, 118, pan, 0, 0.04);
   }
 
   // The last ball of a run: the room notices. A low swell, two heartbeats and

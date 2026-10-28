@@ -117,7 +117,7 @@ All sharing works locally; there is no account or server.
 - Each ball sings in its own register (root, fifth, octave) and pans by its position on the board, so twelve balls in flight read as a chord spread across the stereo field instead of one unison pitch.
 - Hit brightness follows impact: soft taps are dull and quiet, hard hits are bright and short. A shared master bus with glue compression and a short plate tail keeps a burst of pin hits from clipping or turning to hiss.
 - There is **no screen shake**. At the new, larger type the offset read as a camera fault rather than impact, so the cabinet stays perfectly still and the punch comes from the flash, the sparks and the sound instead.
-- A lucky pin firing a ball away sounds like a **felt mallet on a marimba bar**: round, short, on the board's pentatonic ladder, with a soft wooden tick for the pin itself. The first version was a spring, a click and a burst of noise — exciting once, tiring after fifty. Bright, hissy, all attack. This one stays warm enough for a long session.
+- A lucky pin firing a ball away plays a **recorded sample** (`audio/bump.js`): a supplied hit trimmed to 322 ms, faded out, peak-normalised to −6 dBFS, with a little pitch variation per hit so repeats don't machine-gun. The synthesised felt-mallet version stays as the fallback for the instant before the buffer decodes, or if the file is missing.
 - New chain tiers get an on-board callout and a brighter HUD pulse.
 - The board is lit like a parlor cabinet: every pocket glows in its own slot color, the center jackpot tower breathes gold, and a chase of 34 bulbs runs above the payout rail — slow at rest, brisk while balls are dropping, and sprinting when a jackpot is being decided.
 - Each ball carries a halo that brightens with its speed, pin hits bloom where they land, and the inner glass walls catch the marquee light while a slow reflection drifts across the cover, so the playfield reads as a lit box instead of a flat plane.
@@ -205,5 +205,6 @@ The game pauses its physics while the wheel overlay is open, then resumes the ex
 - `preview.png` — pachinko gameplay preview
 - `preview-wheel.png` — prize wheel preview
 - `preview-passport.png` — exported collection passport example
+- `audio/bump.js` — the gold bumper hit, trimmed and embedded as a data URI (works from `file://` in the desktop window, where fetching local files is blocked)
 - `desktop/NovaPachinko.cmd` — opens the game in a dedicated app window (no browser chrome, no throttling; `smooth` argument renders at 1× pixel scale)
 - `desktop/README.md` — what the launcher changes, and an honest note on frame rate
