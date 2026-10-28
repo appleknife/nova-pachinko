@@ -2441,54 +2441,97 @@
   }
 }
 
-/* Phone readability for the vault: same idea as the cabinet, one step up. */
+/* Phone readability for the vault: same idea as the cabinet, one step up.
+   Size alone was not enough — the dim grey body copy stayed hard to read at
+   arm's length, so the supporting text also gets a lighter tone on phones
+   while the arcade labels keep their colour coding. */
 @media (max-width: 860px) {
   .reward-top,
   .reward-badge,
   .rarity-step {
-    font-size: 8px;
-    letter-spacing: 0.1em;
+    font-size: 8.5px;
+    letter-spacing: 0.09em;
   }
 
   #rewardRarity {
-    font-size: 8.5px;
+    font-size: 9px;
   }
 
   .wheel-tab span {
-    font-size: 8px;
+    font-size: 8.5px;
   }
 
   .odds-box summary {
-    font-size: 8.5px;
+    font-size: 9px;
   }
 
   .game-toast {
     padding: 11px 16px;
+    font-size: 9.5px;
+  }
+
+  /* Body copy: the vault's explanatory lines. */
+  .reward-copy p,
+  .spark-copy p {
+    font-size: 9.5px;
+    line-height: 1.45;
+    color: #c2c8df;
+  }
+
+  .reward-copy p {
+    -webkit-line-clamp: 3;
+  }
+
+  .relic-effect {
+    font-size: 9.5px;
+    line-height: 1.4;
+    color: #b4bad2;
+  }
+
+  .relic-blurb,
+  .vault-hint {
     font-size: 9px;
+    color: #9aa1bb;
   }
 
   /* Vault cards are read at arm's length for a long time, so the card meta
      gets the same lift as the HUD labels. */
   .vc-rarity,
   .vc-count {
-    font-size: 8px;
+    font-size: 8.5px;
   }
 
-  .vc-bottom,
-  .vault-note,
-  .vault-hint,
-  .odds-foot {
-    font-size: 7.5px;
+  .vc-bottom {
+    font-size: 8.5px;
+    color: #9098b4;
+  }
+
+  .vault-note {
+    font-size: 8.5px;
+    color: #8f96b3;
   }
 
   .odds-row,
-  .spin-cost,
-  .relic-blurb {
-    font-size: 9px;
+  .odds-row strong {
+    font-size: 9.5px;
   }
 
+  .odds-foot {
+    font-size: 8.5px;
+    color: #9aa1bc;
+  }
+
+  .spin-cost,
   .pity-row,
   .relic-state,
+  .relic-progress-text {
+    font-size: 8.5px;
+  }
+
+  .relic-progress-text {
+    color: #9098b4;
+  }
+
   .loadout-slot-copy span,
   .passport-power span,
   .passport-stats span,
@@ -2497,16 +2540,14 @@
   .passport-branch,
   .passport-footer,
   .compare-stat {
-    font-size: 7.5px;
+    font-size: 8.5px;
   }
 
-  .relic-effect,
-  .relic-progress-text,
   .ps-copy span,
   .compare-diff,
   .passport-hint,
   .passport-kicker,
   .passport-card-top {
-    font-size: 8px;
+    font-size: 8.5px;
   }
 }

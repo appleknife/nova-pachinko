@@ -1926,42 +1926,39 @@
         ctx.stroke();
         ctx.restore();
       } else if (pin.big) {
-        // A big pin that is not gold this run reads as a steel bumper, so the
-        // board never grows a stray white ball.
+        // A big deflector that did not roll lucky this run. Flat colour at
+        // this size washed out into a white blob, so the large studs get a
+        // dark bezel and a satin cap: cool next to the gold ones, and clearly
+        // a deliberate piece of the board rather than a stray ball.
         ctx.fillStyle = "rgba(5, 7, 16, 0.5)";
         ctx.beginPath();
-        ctx.arc(pin.x + 1.4, pin.y + 2, pin.r, 0, Math.PI * 2);
+        ctx.arc(pin.x + 1.4, pin.y + 1.9, pin.r, 0, Math.PI * 2);
         ctx.fill();
 
-        const cap = ctx.createRadialGradient(
-          pin.x - pin.r * 0.32,
-          pin.y - pin.r * 0.36,
-          1,
-          pin.x,
-          pin.y,
-          pin.r * 1.12
-        );
-        cap.addColorStop(0, "#a7b2d4");
-        cap.addColorStop(0.5, "#4d5675");
-        cap.addColorStop(1, "#1a2036");
-        ctx.fillStyle = cap;
+        ctx.fillStyle = "#332e4f";
         ctx.beginPath();
         ctx.arc(pin.x, pin.y, pin.r, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = "rgba(198, 214, 255, 0.38)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(9, 12, 24, 0.85)";
+        ctx.fillStyle = "#a9a2c8";
         ctx.beginPath();
-        ctx.arc(pin.x, pin.y, pin.r * 0.42, 0, Math.PI * 2);
+        ctx.arc(pin.x, pin.y, pin.r - 1.6, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = "rgba(190, 210, 255, 0.2)";
-        ctx.lineWidth = 0.8;
+        ctx.fillStyle = "rgba(18, 16, 34, 0.55)";
         ctx.beginPath();
-        ctx.arc(pin.x, pin.y, pin.r * 0.68, Math.PI * 1.05, Math.PI * 1.7);
+        ctx.arc(pin.x, pin.y, pin.r - 1.6, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.beginPath();
+        ctx.arc(pin.x - pin.r * 0.24, pin.y - pin.r * 0.28, pin.r * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(214, 226, 255, 0.22)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r - 1.6, Math.PI * 1.06, Math.PI * 1.74);
         ctx.stroke();
       } else {
         ctx.fillStyle = "rgba(5, 7, 16, 0.46)";
@@ -3150,10 +3147,13 @@
         stopRoomAmbience();
         break;
       case "wheel-start":
-        tone(174, 0.34, "triangle", 0.018, 348);
-        tone(392, 0.22, "sine", 0.015, 784, 0, 0.14);
-        // The disc picking up speed: a soft band of air sweeping upward.
-        noiseSweep(260, 2700, 0.9, 0.011, 1.1, 0, 0.16);
+        // The lever engaging, then felt against the rim. This used to be a
+        // long band of air sweeping upward, which read as a buzz; a short
+        // falling brush plus a warm fifth sounds like a wheel being pushed.
+        tone(126, 0.1, "triangle", 0.03, 82, 0, 0, 0.03);
+        noiseSweep(1700, 320, 0.32, 0.0075, 0.85, 0, 0.2);
+        tone(196, 0.46, "sine", 0.019, 294, 0, 0.03, 0.12);
+        tone(294, 0.5, "triangle", 0.01, 392, 0, 0.05, 0.2);
         break;
       case "vault-tab":
         // A page turning somewhere in the vault, not a UI beep.
@@ -3166,11 +3166,11 @@
         // Fast rim ticks are high and quiet; as the wheel slows they drop in
         // pitch and get louder, the way a real wheel's clicks do.
         tone(
-          1060 - progress * 430 + Math.random() * 30,
+          880 - progress * 360 + Math.random() * 24,
           0.014 + progress * 0.01,
-          "triangle",
-          0.0026 + progress * 0.004,
-          520,
+          "sine",
+          0.0024 + progress * 0.0036,
+          470,
           pan,
           0,
           0.06
@@ -3200,6 +3200,11 @@
         tone(96, 0.24, "sine", 0.02, 74, 0, 0, 0.08);
         noiseSweep(1900, 420, 0.5, 0.007, 1.5, 0, 0.22);
         break;
+      case "rarity-tick":
+        // The ladder flickering past. Each tier previews its own reveal in
+        // miniature, so a good roll can be heard coming before it lands.
+        sfxRarityTick(Number(detail.rank) || 0);
+        break;
       case "wheel-reveal":
         sfxWheelReveal(Number(detail.rank) || 0);
         // The reward card being set down on the table.
@@ -3223,28 +3228,71 @@
     }
   }
 
-  function sfxWheelReveal(rank) {
-    const table = [
-      [330],
-      [392, 523],
-      [523, 659, 784],
-      [523, 659, 784, 1046, 1318],
-      [523, 659, 784, 1046, 1318, 1568, 2093]
-    ];
-    const notes = table[clamp(Math.floor(rank), 0, 4)];
+  // Each tier has its own voice rather than just more notes than the last:
+  // a dry wooden knock, a bright partner, a blooming triad, then the weighted
+  // chords below. The same ladder is used twice — quietly as each tier flicks
+  // past on the reward card, loudly when it finally lands — so the flicker
+  // itself tells you how good the roll is about to be.
+  function sfxRarityTick(rank) {
+    const r = clamp(Math.floor(rank), 0, 4);
+    const pan = (Math.random() - 0.5) * 0.28;
 
-    const air = rank >= 4 ? 0.34 : rank >= 3 ? 0.2 : 0.09;
+    if (r === 0) {
+      tone(300, 0.075, "sine", 0.012, 268, pan, 0, 0.02);
+    } else if (r === 1) {
+      tone(440, 0.085, "sine", 0.012, 440, pan, 0, 0.04);
+      tone(660, 0.07, "sine", 0.0045, 660, pan, 0.006, 0.07);
+    } else if (r === 2) {
+      tone(587, 0.1, "triangle", 0.011, 587, pan, 0, 0.06);
+      tone(880, 0.08, "sine", 0.0055, 880, pan * 0.7, 0.007, 0.09);
+      tone(1174, 0.07, "sine", 0.0035, 1174, pan, 0.014, 0.12);
+    } else if (r === 3) {
+      tone(784, 0.12, "sine", 0.012, 784, pan, 0, 0.1);
+      tone(1174, 0.1, "sine", 0.0055, 1174, pan * 0.6, 0.008, 0.13);
+      tone(1568, 0.08, "sine", 0.0035, 1568, pan, 0.016, 0.16);
+    } else {
+      tone(1046, 0.15, "sine", 0.012, 1046, pan, 0, 0.16);
+      tone(1568, 0.13, "sine", 0.0065, 1568, pan * 0.6, 0.01, 0.18);
+      tone(2093, 0.11, "sine", 0.004, 2093, pan, 0.02, 0.22);
+      tone(2637, 0.09, "sine", 0.0025, 2637, -pan, 0.03, 0.26);
+    }
+  }
+
+  function sfxWheelReveal(rank) {
+    const r = clamp(Math.floor(rank), 0, 4);
+
+    if (r === 0) {
+      // Common: a token set down on the felt. No fanfare, no scolding.
+      tone(294, 0.14, "sine", 0.019, 262, 0, 0.02, 0.04);
+      tone(147, 0.2, "sine", 0.013, 128, 0, 0, 0.06);
+      return;
+    }
+
+    if (r === 1) {
+      tone(392, 0.17, "triangle", 0.021, 392, 0, 0, 0.08);
+      tone(523, 0.22, "sine", 0.019, 523, 0, 0.06, 0.1);
+      tone(784, 0.18, "sine", 0.006, 784, 0, 0.11, 0.14);
+      return;
+    }
+
+    if (r === 2) {
+      // Epic blooms into a chord with a shimmer opening behind it.
+      [523, 659, 784].forEach((hz, index) => {
+        tone(hz, 0.22, "triangle", 0.021, hz, 0, index * 0.06, 0.1);
+      });
+      tone(1046, 0.28, "sine", 0.012, 1046, 0, 0.18, 0.22);
+      tone(98, 0.32, "sine", 0.014, 88, 0, 0, 0.08);
+      noiseSweep(1500, 5200, 0.55, 0.003, 2.2, 0, 0.3);
+      return;
+    }
+
+    const notes =
+      r >= 4
+        ? [523, 659, 784, 1046, 1318, 1568, 2093]
+        : [523, 659, 784, 1046, 1318];
+    const air = r >= 4 ? 0.34 : 0.2;
     notes.forEach((frequency, index) => {
-      tone(
-        frequency,
-        rank >= 3 ? 0.28 : 0.16,
-        rank >= 3 ? "sine" : "triangle",
-        rank >= 3 ? 0.028 : 0.021,
-        frequency * 1.02,
-        0,
-        index * 0.068,
-        air
-      );
+      tone(frequency, 0.28, "sine", 0.028, frequency * 1.02, 0, index * 0.068, air);
     });
 
     if (rank >= 3) {

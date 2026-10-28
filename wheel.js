@@ -2169,11 +2169,16 @@
 
     window.clearInterval(wheel.rarityRollTimer);
     if (!REDUCED_MOTION) {
+      // The ladder flickers at the real odds rather than one fifth each, so a
+      // mythic flash past stays a genuine event instead of manufactured
+      // tension. Each stop also plays that tier's own preview sound.
+      const ladder = RARITIES.map((entry) => [entry, entry.weight]);
       wheel.rarityRollTimer = window.setInterval(() => {
-        const flicker = RARITIES[Math.floor(Math.random() * RARITIES.length)];
+        const flicker = weightedRarity(ladder);
         el.rewardCard.style.setProperty("--rarity-rgb", flicker.rgb);
         el.rewardRarity.textContent = flicker.name.toUpperCase();
         el.rewardRarity.style.color = `rgb(${flicker.rgb})`;
+        dispatchSfx("rarity-tick", { rank: flicker.rank });
       }, 85);
     }
 

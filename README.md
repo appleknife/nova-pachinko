@@ -97,12 +97,12 @@ All sharing works locally; there is no account or server.
 ## On a phone
 
 - The layout is sized for a thumb, and double-tapping no longer zooms the page (pinch-zoom is still there when you want it).
-- The small arcade type in the HUD and the vault gets one step larger below 860 px, so labels stay readable at arm's length without turning the cabinet into a generic mobile card stack.
+- The small arcade type in the HUD, the vault, the relic cards and the passport gets one step larger below 860 px, and the dim grey supporting copy is lightened, so labels stay readable at arm's length without turning the cabinet into a generic mobile card stack.
 - Render resolution defaults to a capped 1.75× backing store on touch devices, with the **RES** button available if a device still stutters.
 
 ## Other rules
 
-- **Gold pins** count as two bounce-chain hits, bounce livelier, and light up when struck. Each run rolls a fresh set of four lucky pins — three of the four big deflectors plus one random regular pin — so the hot lanes move from run to run instead of being memorized.
+- **Gold pins** count as two bounce-chain hits, bounce livelier, and light up when struck. Each run rolls a fresh set of four lucky pins — three of the four big deflectors plus one random regular pin — so the hot lanes move from run to run instead of being memorized. Large deflectors that did not roll lucky are cool satin studs, so a plain big pin still reads as part of the board.
 - **Every fifth drop** is a lucky gold ball worth ×2 on its slot payout, unless a relic changes the cadence.
 - **Bonus slots** add a ball back to the run.
 - **Auto drop** is always available from the first run — it is a pace control, not a collection unlock.
@@ -119,7 +119,8 @@ All sharing works locally; there is no account or server.
 - The wheel bezel's 32 bulbs are two comets that idle, race while the wheel spins, and bloom around the pointer when a result lands.
 - The wheel table is lit by a warm lamp: light pools around the bezel, falls across the top of the disc, and catches a few slow motes of dust drifting through it.
 - Opening the vault brings up its own room tone — a filtered low pad that breathes, a whisper of air, and an occasional soft chime from the shelves, so the wheel never sits in silence.
-- Spinning adds a band of air sweeping upward under the ticks, each tick now has a wooden body under the click, and the wheel settles with a low thud and an airy tail. The reward card gets a paper hush as it is set down.
+- Spinning starts with the lever catching and a short breath of felt, then warms into a rising fifth — a wheel being pushed, not a motor spinning up. Under it, each rim tick has a wooden body under the click, and the wheel settles with a low thud and an airy tail. The reward card gets a paper hush as it is set down.
+- **Every rarity has its own voice, at both sizes.** The rarity ladder on the reward card flickers past at the real odds, and each stop plays that tier's own preview: a dull wooden tap for Common, a brighter pair for Rare, a shimmering triad for Epic, a bell for Legendary, and a glass ping for Mythic that only appears when a real 1% flash goes past. The landing then plays the same ladder at full size — a token set down for Common, a blooming chord for Epic, and the full choir production for Mythic.
 - Rare pulls escalate instead of just showing a different label. **Legendary** adds a sub thud under the chord, a run of sparkles, a breath of air, a gold flash across the screen, a single sweep of light over the reward card, and a haptic double-tap.
 - **Mythic** gets its own production: a pink screen flash that pulses twice, two spark bursts plus a widening shockwave across the disc, a detuned choir holding under the arpeggio, a shimmer sweep, a cascade of high notes falling like sparks, an encore chord a beat later, a double sweep of light over the card, a pulsing card glow, a pink toast, and a longer haptic pattern. It is 1% for a reason, and the room is already quiet when it lands.
 - In the last second of a spin the room tone ducks away and a held **G** blooms underneath — the dominant of the C-major reveal — so the landing chord and the rarity roll resolve out of a pocket of quiet instead of over a busy room. The lamp dims with it, so the landing flash has somewhere to bloom from.

@@ -1658,7 +1658,7 @@ h1 {
   }
 
   .hint {
-    font-size: 9px;
+    font-size: 9.5px;
   }
 
   .lucky-card small,
@@ -1669,8 +1669,18 @@ h1 {
   }
 
   .side-footer,
-  .corner-tag,
   #reportNext {
-    font-size: 7.5px;
+    font-size: 8px;
+  }
+
+  /* These two are decorative on desktop, but at this size they were the
+     dimmest text in the cabinet. */
+  .side-footer {
+    color: #6b7393;
+  }
+
+  .corner-tag {
+    font-size: 8px;
+    color: rgba(255, 245, 224, 0.4);
   }
 }
