@@ -853,6 +853,98 @@
   transform: translateX(-50%) translateY(1px);
 }
 
+.spin-five-btn {
+  min-height: 44px;
+  margin-top: 9px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(255, 226, 168, 0.34);
+  border-radius: 13px;
+  color: #ffe3aa;
+  background:
+    linear-gradient(180deg, rgba(255, 214, 138, 0.16), rgba(255, 190, 92, 0.06));
+  cursor: pointer;
+  font-family: var(--ui);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  transition: transform 90ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.spin-five-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 226, 168, 0.55);
+  background:
+    linear-gradient(180deg, rgba(255, 214, 138, 0.24), rgba(255, 190, 92, 0.1));
+}
+
+.spin-five-btn:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+/* The receipt a batch leaves behind, so five rewards do not vanish in a blur. */
+.batch-list[hidden] {
+  display: none;
+}
+
+.batch-list {
+  margin-top: 10px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(6, 9, 18, 0.72);
+}
+
+.batch-list.pop {
+  animation: batch-pop 300ms ease-out;
+}
+
+@keyframes batch-pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.batch-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 9px;
+}
+
+.batch-rarity {
+  font-weight: 800;
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+}
+
+.batch-row strong {
+  overflow: hidden;
+  color: #e7e2f2;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.batch-row em {
+  color: #8d94b2;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.batch-row em.is-new {
+  color: #ffd386;
+}
+
 .spin-btn:disabled {
   cursor: default;
   opacity: 0.42;
@@ -2599,6 +2691,20 @@
   .passport-rival p {
     font-size: 9.5px;
     line-height: 1.5;
+  }
+
+  .batch-row {
+    font-size: 10px;
+  }
+
+  .batch-rarity,
+  .batch-row em {
+    font-size: 9px;
+  }
+
+  .spin-five-btn {
+    font-size: 12px;
+    min-height: 48px;
   }
 
   .passport-showcase-slot.empty .ps-copy strong {

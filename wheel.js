@@ -510,6 +510,8 @@
     spinBtn: document.getElementById("spinBtn"),
     spinBtnLabel: document.getElementById("spinBtnLabel"),
     skipSpin: document.getElementById("skipSpin"),
+    spinFiveBtn: document.getElementById("spinFiveBtn"),
+    batchList: document.getElementById("batchList"),
     spinCost: document.getElementById("spinCost"),
     wheelStatus: document.getElementById("wheelStatus"),
     rewardCard: document.getElementById("rewardCard"),
@@ -604,6 +606,8 @@
     spinning: false,
     busy: false,
     revealTimer: 0,
+    // { total, left, results } while a x5 batch is running.
+    batch: null,
     pending: null,
     lastResult: null,
     selectedIndex: -1,
@@ -1641,6 +1645,7 @@
 
     el.spinBtn.addEventListener("click", spinWheel);
     el.skipSpin.addEventListener("click", skipSpin);
+    el.spinFiveBtn.addEventListener("click", () => spinBatch(5));
     el.sparkBtn.addEventListener("click", armSpark);
 
     el.vaultFilters.addEventListener("click", (event) => {
@@ -1770,6 +1775,8 @@
   function closeWheel() {
     if (!wheel.open || wheel.busy) return;
 
+    // A batch waiting between spins must not fire into a closed vault.
+    wheel.batch = null;
     wheel.open = false;
     el.wheelMode.classList.remove("open");
     el.wheelMode.setAttribute("aria-hidden", "true");
@@ -1875,6 +1882,7 @@
     const canSpin = tokens > 0 && !busy;
 
     el.spinBtn.disabled = !canSpin;
+    el.spinFiveBtn.disabled = busy || tokens < 5;
     // Skip only exists while there is something to skip: a spin in flight, or
     // the rarity ladder flickering towards its result.
     el.skipSpin.hidden = !busy;
@@ -1886,7 +1894,11 @@
     el.tabPassport.disabled = busy;
 
     if (busy) {
-      el.spinBtnLabel.textContent = wheel.spinning ? "SPINNING…" : "READING FATE…";
+      el.spinBtnLabel.textContent = wheel.batch
+        ? `${wheel.batch.left} LEFT…`
+        : wheel.spinning
+          ? "SPINNING…"
+          : "READING FATE…";
     } else if (tokens > 0) {
       el.spinBtnLabel.textContent = wheel.lastResult ? "SPIN AGAIN" : "SPIN THE WHEEL";
     } else {
@@ -2045,7 +2057,8 @@
     wheel.busy = true;
     wheel.spinning = true;
     wheel.spinStart = performance.now();
-    wheel.spinDuration = REDUCED_MOTION ? 1250 : 4050 + Math.random() * 900;
+    // A batch would be tedious at full length, so those spins run short.
+    wheel.spinDuration = wheel.batch ? 460 : REDUCED_MOTION ? 1250 : 4050 + Math.random() * 900;
     wheel.spinFrom = wheel.angle;
     wheel.lastTick = -1;
     wheel.lastTickAt = 0;
@@ -2155,6 +2168,55 @@
     requestAnimationFrame(wheelLoop);
   }
 
+  // Five tokens, five draws, one receipt. Each spin still runs the real
+  // pipeline (tokens, pity, collection, mastery, Dust) — the batch only changes
+  // how long you wait between them.
+  function spinBatch(count) {
+    if (!wheel.open || wheel.busy) return;
+    if (tokens < count) {
+      showToast(`NEED ${count} TOKENS · LAND A PACHINKO JACKPOT`, "");
+      return;
+    }
+    showBatchList(null);
+    wheel.batch = { total: count, left: count, results: [] };
+    spinWheel();
+  }
+
+  function showBatchList(results) {
+    const list = el.batchList;
+    if (!list) return;
+    list.textContent = "";
+    if (!results || !results.length) {
+      list.hidden = true;
+      return;
+    }
+
+    for (const result of results) {
+      const row = document.createElement("div");
+      row.className = "batch-row";
+
+      const rarity = document.createElement("span");
+      rarity.className = "batch-rarity";
+      rarity.style.color = `rgb(${result.rarity.rgb})`;
+      rarity.textContent = result.rarity.short;
+
+      const name = document.createElement("strong");
+      name.textContent = result.item.name;
+
+      const tag = document.createElement("em");
+      tag.className = result.isNew ? "is-new" : "is-dup";
+      tag.textContent = result.isNew ? "NEW" : `×${result.count}`;
+
+      row.append(rarity, name, tag);
+      list.appendChild(row);
+    }
+
+    list.hidden = false;
+    list.classList.remove("pop");
+    void list.offsetWidth;
+    list.classList.add("pop");
+  }
+
   // One tap finishes the spin, a second tap skips the rarity flicker. Both
   // keep the real reward, the real odds and the real sounds: skipping only
   // removes waiting, never information.
@@ -2211,7 +2273,7 @@
     wheel.revealTimer = window.setTimeout(() => {
       wheel.revealTimer = 0;
       if (wheel.pending) revealReward();
-    }, REDUCED_MOTION ? 220 : 680);
+    }, REDUCED_MOTION ? 220 : wheel.batch ? 300 : 680);
   }
 
   function revealReward() {
@@ -2283,6 +2345,20 @@
     window.dispatchEvent(
       new CustomEvent("nova:collectionchange", { detail: getVaultSummary() })
     );
+
+    if (wheel.batch) {
+      wheel.batch.results.push(result);
+      wheel.batch.left -= 1;
+      if (wheel.batch.left > 0) {
+        window.setTimeout(() => {
+          if (wheel.open) spinWheel();
+        }, 340);
+      } else {
+        const summary = wheel.batch.results.slice();
+        wheel.batch = null;
+        window.setTimeout(() => showBatchList(summary), 520);
+      }
+    }
 
     const vaultCard = vaultCards.get(item.id);
     if (vaultCard && isNew) {

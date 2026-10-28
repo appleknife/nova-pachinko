@@ -888,6 +888,56 @@ h1 {
   aspect-ratio: 760 / 1060;
 }
 
+/* The last-ball callout. It lives over the empty upper playfield, fades in
+   only while the cinematic slow motion runs, and never blocks a tap. */
+.final-chip {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 15px 7px 12px;
+  transform: translate(-50%, 6px) scale(0.94);
+  border: 1px solid rgba(255, 214, 138, 0.45);
+  border-radius: 999px;
+  color: #ffe9bd;
+  background: rgba(9, 11, 22, 0.82);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms ease, transform 320ms ease;
+}
+
+.final-chip.on {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.final-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffcf7a;
+  box-shadow: 0 0 10px rgba(255, 199, 95, 0.9);
+  animation: final-chip-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes final-chip-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .final-chip-dot {
+    animation: none;
+  }
+}
+
 #gameCanvas {
   display: block;
   width: 100%;
@@ -1666,6 +1716,11 @@ h1 {
   .run-stat span,
   .final-meta {
     font-size: 8.5px;
+  }
+
+  .final-chip {
+    font-size: 10px;
+    padding: 8px 17px 8px 14px;
   }
 
   .side-footer,

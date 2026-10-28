@@ -23,6 +23,7 @@
     resetBtn: document.getElementById("resetBtn"),
     soundBtn: document.getElementById("soundBtn"),
     gameOver: document.getElementById("gameOver"),
+    finalChip: document.getElementById("finalBallChip"),
     finalTitle: document.getElementById("finalTitle"),
     finalScore: document.getElementById("finalScore"),
     finalBest: document.getElementById("finalBest"),
@@ -143,6 +144,10 @@
     lastBumperSound: 0,
     time: 0,
     slowMo: 0,
+    // 0..1 cinematic slow-motion for the last ball of a run.
+    cinema: 0,
+    cinemaFocus: null,
+    cinemaFired: false,
     tensionBall: null,
     shake: 0,
     flash: 0,
@@ -561,8 +566,14 @@
 
     trackQuality(now - lastFrame);
     const dt = clamp((now - lastFrame) / 1000, 0, 0.05);
+    updateCinema(dt);
     const slowMotion = state.slowMo > 0;
-    const timeScale = slowMotion ? 0.34 : 1;
+    // The last ball of a run gets a much deeper slow motion than a jackpot
+    // tease, and the two never stack into a freeze.
+    let timeScale = slowMotion ? 0.34 : 1;
+    if (state.cinema > 0.01) {
+      timeScale = Math.min(timeScale, 1 - 0.72 * state.cinema);
+    }
 
     lastFrame = now;
     accumulator += dt * timeScale;
@@ -575,12 +586,58 @@
     }
     if (steps === 14) accumulator = 0;
 
-    updateEffects(dt * (slowMotion ? 0.55 : 1));
+    updateEffects(dt * (slowMotion ? 0.55 : 1) * (1 - 0.45 * state.cinema));
     updateAutoAim(dt);
     if (slowMotion) state.slowMo = Math.max(0, state.slowMo - dt);
     updateHud(false);
     render(dt);
     requestAnimationFrame(frame);
+  }
+
+  // The last ball of a run is the payoff moment, so the game leans in: the
+  // camera pushes towards the ball, time stretches out, the HUD calls it, and
+  // the room gets a low swell. It only starts once the ball is through the pin
+  // field, so a normal drop is untouched.
+  function updateCinema(dt) {
+    const balls = state.activeBalls;
+    let target = 0;
+
+    if (
+      state.status === "playing" &&
+      state.ballsLeft === 0 &&
+      balls.length === 1 &&
+      !balls[0].captured
+    ) {
+      const ball = balls[0];
+      // Only the last stretch above the slots, so the scene is a flourish
+      // rather than ten extra seconds on every run.
+      target = clamp((ball.y - 660) / 200, 0, 1);
+      if (target > 0) state.cinemaFocus = { x: ball.x, y: ball.y - 26 };
+    }
+
+    if (REDUCED_MOTION) target = 0;
+
+    state.cinema += (target - state.cinema) * clamp(dt * 2.8, 0, 1);
+    if (state.cinema < 0.004) {
+      state.cinema = 0;
+      state.cinemaFocus = null;
+    }
+
+    if (state.cinema > 0.32 && !state.cinemaFired) {
+      state.cinemaFired = true;
+      sfxFinalBall();
+      haptic(18);
+    } else if (state.cinema < 0.06) {
+      state.cinemaFired = false;
+    }
+
+    if (ui.finalChip) {
+      const on = state.cinema > 0.22;
+      if (ui.finalChip.dataset.on !== String(on)) {
+        ui.finalChip.dataset.on = String(on);
+        ui.finalChip.classList.toggle("on", on);
+      }
+    }
   }
 
   function stepPhysics(dt) {
@@ -1321,6 +1378,13 @@
     state.lastDropAt = -9999;
     state.slowMo = 0;
     state.tensionBall = null;
+    state.cinema = 0;
+    state.cinemaFocus = null;
+    state.cinemaFired = false;
+    if (ui.finalChip) {
+      ui.finalChip.classList.remove("on");
+      ui.finalChip.dataset.on = "false";
+    }
     state.shake = 0;
     state.flash = 0;
     state.overTimer = 0;
@@ -1544,7 +1608,23 @@
 
     buildCabinetLayers();
     ctx.drawImage(cabinetLayer, 0, 0, W, H);
-    drawGlassContents(dt);
+
+    // The cabinet stays put and the camera looks closer through the glass.
+    if (state.cinema > 0.004 && state.cinemaFocus) {
+      const zoom = 1 + 0.26 * state.cinema;
+      const fx = state.cinemaFocus.x;
+      const fy = state.cinemaFocus.y;
+      ctx.save();
+      roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+      ctx.clip();
+      ctx.translate(fx, fy);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-fx, -fy);
+      drawGlassContents(dt, true);
+      ctx.restore();
+    } else {
+      drawGlassContents(dt);
+    }
 
     ctx.restore();
 
@@ -1639,10 +1719,12 @@
     ctx.restore();
   }
 
-  function drawGlassContents(dt) {
+  function drawGlassContents(dt, skipClip) {
     ctx.save();
-    roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
-    ctx.clip();
+    if (!skipClip) {
+      roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+      ctx.clip();
+    }
 
     drawStarField();
     drawGrid();
@@ -2810,8 +2892,9 @@
       { hz: 110, vol: 0.3, type: "sine" },
       { hz: 110.4, vol: 0.16, type: "sine" },
       { hz: 164.81, vol: 0.19, type: "sine" },
-      { hz: 220, vol: 0.11, type: "triangle" },
-      { hz: 329.63, vol: 0.045, type: "sine" }
+      { hz: 220, vol: 0.13, type: "triangle" },
+      { hz: 329.63, vol: 0.055, type: "sine" },
+      { hz: 440, vol: 0.02, type: "sine" }
     ];
 
     for (const note of chord) {
@@ -2833,20 +2916,6 @@
     lfo.connect(lfoDepth).connect(padGain.gain);
     lfo.start(start);
     bed.voices.push(lfo);
-
-    const air = ac.createBufferSource();
-    air.buffer = getNoiseBuffer(ac);
-    air.loop = true;
-    const airFilter = ac.createBiquadFilter();
-    airFilter.type = "bandpass";
-    airFilter.frequency.value = 880;
-    airFilter.Q.value = 0.55;
-    const airGain = ac.createGain();
-    // The air used to sit high enough to read as a buzz under everything else.
-    airGain.gain.value = 0.026;
-    air.connect(airFilter).connect(airGain).connect(bed.sum);
-    air.start(start);
-    bed.voices.push(air);
 
     bed.gain.gain.setValueAtTime(0.0001, start);
     // Room tone is a bed, not a soundtrack: it has to sit clearly under the
@@ -3129,16 +3198,29 @@
     tone(1590, 0.11, "triangle", 0.012, 1760, 0, 0.03);
   }
 
-  // A spring under tension, with the launch under it: the pitch falls as the
-  // ball leaves, a bright click marks the release, air sells the speed, and a
-  // gold chime keeps it lucky rather than purely mechanical.
+  // A felt mallet on a marimba bar. The old version was a spring, a click and a
+  // burst of noise, which is exciting once and tiring after fifty: bright,
+  // hissy and all attack. This is round, stays on the board's pentatonic
+  // ladder, and gets out of the way in a fifth of a second, so a long session
+  // still sounds like a room and not a warning.
   function sfxBumper(impact, launchSpeed) {
     const power = clamp((launchSpeed || impact) / 1300, 0.4, 1);
-    tone(210 + power * 300, 0.2 + power * 0.08, "triangle", 0.034 + power * 0.02, 88, 0, 0, 0.06);
-    tone(980 + power * 420, 0.07, "sine", 0.02 + power * 0.012, 640, 0, 0, 0.05);
-    tone(118, 0.16, "sine", 0.026, 70, 0, 0, 0.16);
-    noiseSweep(2600, 700, 0.22, 0.008 + power * 0.005, 1.4, 0, 0.12);
-    tone(1568, 0.26, "sine", 0.012, 1568, 0, 0.03, 0.34);
+    const base = 392 + power * 132; // G4 up towards B4 as the hit gets harder
+    tone(base, 0.2, "sine", 0.03, base * 1.004, 0, 0, 0.18);
+    tone(base * 2, 0.1, "sine", 0.011, base * 2, 0, 0.004, 0.12);
+    tone(base * 3, 0.06, "sine", 0.004, base * 3, 0, 0.008, 0.1);
+    // The pin taking the hit: a soft wooden tick with no air under it.
+    tone(150, 0.085, "triangle", 0.013, 118, 0, 0, 0.04);
+  }
+
+  // The last ball of a run: the room notices. A low swell, two heartbeats and
+  // a held fifth, gone quiet enough that the landing chord still has room.
+  function sfxFinalBall() {
+    tone(65.4, 1.7, "sine", 0.03, 61.7, 0, 0, 0.45);
+    tone(98, 1.5, "sine", 0.017, 92.5, 0, 0.05, 0.45);
+    tone(196, 1.1, "sine", 0.011, 196, 0, 0.1, 0.4);
+    tone(72, 0.22, "sine", 0.02, 58, 0, 0, 0.18);
+    tone(72, 0.22, "sine", 0.013, 58, 0, 0.28, 0.18);
   }
 
   function sfxChainUp(multiplier) {
@@ -3261,7 +3343,7 @@
           880 - progress * 360 + Math.random() * 24,
           0.014 + progress * 0.01,
           "sine",
-          0.0042 + progress * 0.0058,
+          0.006 + progress * 0.0082,
           470,
           pan,
           0,
@@ -3274,7 +3356,7 @@
         if (spinTickCount % 6 === 0) {
           const melody = [784, 880, 988, 1046, 1174, 1318];
           const note = melody[clamp(Math.floor(progress * melody.length), 0, melody.length - 1)];
-          tone(note, 0.24, "sine", 0.013, note, pan * 0.4, 0, 0.3);
+          tone(note, 0.24, "sine", 0.019, note, pan * 0.4, 0, 0.3);
         }
         // A wooden body under the click so the pegs feel like they have weight.
         tone(
@@ -3295,8 +3377,8 @@
       case "wheel-land":
         // Cut the drone first so the landing chord arrives in the quiet it made.
         endWheelTension();
-        tone(392, 0.16, "triangle", 0.04, 523);
-        tone(659, 0.26, "sine", 0.031, 988, 0, 0.08);
+        tone(392, 0.16, "triangle", 0.052, 523);
+        tone(659, 0.26, "sine", 0.04, 988, 0, 0.08);
         // The wheel settling into its pocket.
         tone(96, 0.24, "sine", 0.026, 74, 0, 0, 0.08);
         noiseSweep(1900, 420, 0.5, 0.009, 1.5, 0, 0.22);
@@ -3340,23 +3422,23 @@
     const pan = (Math.random() - 0.5) * 0.28;
 
     if (r === 0) {
-      tone(300, 0.075, "sine", 0.019, 268, pan, 0, 0.02);
+      tone(300, 0.075, "sine", 0.027, 268, pan, 0, 0.02);
     } else if (r === 1) {
-      tone(440, 0.085, "sine", 0.019, 440, pan, 0, 0.04);
-      tone(660, 0.07, "sine", 0.007, 660, pan, 0.006, 0.07);
+      tone(440, 0.085, "sine", 0.027, 440, pan, 0, 0.04);
+      tone(660, 0.07, "sine", 0.01, 660, pan, 0.006, 0.07);
     } else if (r === 2) {
-      tone(587, 0.1, "triangle", 0.018, 587, pan, 0, 0.06);
-      tone(880, 0.08, "sine", 0.009, 880, pan * 0.7, 0.007, 0.09);
-      tone(1174, 0.07, "sine", 0.0058, 1174, pan, 0.014, 0.12);
+      tone(587, 0.1, "triangle", 0.026, 587, pan, 0, 0.06);
+      tone(880, 0.08, "sine", 0.013, 880, pan * 0.7, 0.007, 0.09);
+      tone(1174, 0.07, "sine", 0.008, 1174, pan, 0.014, 0.12);
     } else if (r === 3) {
-      tone(784, 0.12, "sine", 0.019, 784, pan, 0, 0.1);
-      tone(1174, 0.1, "sine", 0.009, 1174, pan * 0.6, 0.008, 0.13);
-      tone(1568, 0.08, "sine", 0.0058, 1568, pan, 0.016, 0.16);
+      tone(784, 0.12, "sine", 0.027, 784, pan, 0, 0.1);
+      tone(1174, 0.1, "sine", 0.013, 1174, pan * 0.6, 0.008, 0.13);
+      tone(1568, 0.08, "sine", 0.008, 1568, pan, 0.016, 0.16);
     } else {
-      tone(1046, 0.15, "sine", 0.019, 1046, pan, 0, 0.16);
-      tone(1568, 0.13, "sine", 0.0105, 1568, pan * 0.6, 0.01, 0.18);
-      tone(2093, 0.11, "sine", 0.0065, 2093, pan, 0.02, 0.22);
-      tone(2637, 0.09, "sine", 0.004, 2637, -pan, 0.03, 0.26);
+      tone(1046, 0.15, "sine", 0.027, 1046, pan, 0, 0.16);
+      tone(1568, 0.13, "sine", 0.015, 1568, pan * 0.6, 0.01, 0.18);
+      tone(2093, 0.11, "sine", 0.009, 2093, pan, 0.02, 0.22);
+      tone(2637, 0.09, "sine", 0.0055, 2637, -pan, 0.03, 0.26);
     }
   }
 
@@ -3394,7 +3476,7 @@
         : [523, 659, 784, 1046, 1318];
     const air = r >= 4 ? 0.34 : 0.2;
     notes.forEach((frequency, index) => {
-      tone(frequency, 0.28, "sine", 0.036, frequency * 1.02, 0, index * 0.068, air);
+      tone(frequency, 0.28, "sine", 0.046, frequency * 1.02, 0, index * 0.068, air);
     });
 
     if (rank >= 3) {

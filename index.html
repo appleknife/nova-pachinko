@@ -129,6 +129,10 @@
       <canvas id="gameCanvas" width="760" height="1060" role="img"
         aria-label="A neon pachinko board with a field of metal pins and seven scoring slots along the bottom. The center slot is the jackpot."></canvas>
 
+      <div id="finalBallChip" class="final-chip" aria-hidden="true">
+        <i class="final-chip-dot"></i>FINAL BALL
+      </div>
+
       <div id="gameOver" class="overlay" aria-hidden="true">
         <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="finalTitle">
           <span class="overlay-kicker">RUN COMPLETE</span>
@@ -262,6 +266,11 @@
               <span id="spinBtnLabel">SPIN THE WHEEL</span>
               <span id="spinCost" class="spin-cost">✦ 1</span>
             </button>
+            <button id="spinFiveBtn" class="spin-five-btn" type="button">
+              <span>SPIN ×5</span>
+              <span class="spin-cost">✦ 5</span>
+            </button>
+            <div id="batchList" class="batch-list" hidden aria-live="polite"></div>
             <button id="skipSpin" class="skip-btn" type="button" hidden aria-label="Skip the rest of this spin">SKIP SPIN ▶▶</button>
             <p class="wheel-note">Every pachinko jackpot mints one Nova Token.</p>
           </aside>

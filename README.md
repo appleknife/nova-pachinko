@@ -36,7 +36,7 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - **Epic+ Spark** lets you spend 75 Dust to force the next rarity roll into the Epic+ pool.
 - **Relics** unlock when a full 10-item branch set is complete. Equip up to three to modify your runs.
 - **Passport** turns your collection into a downloadable share card, a copyable collection code, and a friend-comparison readout.
-- Spinning a lot of tokens? The **SKIP SPIN** pill turns each spin into two taps.
+- Spinning a lot of tokens? The **SKIP SPIN** pill turns each spin into two taps, and **SPIN ×5** spends five tokens on five draws, each with a shortened wheel and a receipt listing what landed.
 
 ## Gacha odds
 
@@ -116,16 +116,17 @@ All sharing works locally; there is no account or server.
 - Pin notes climb a pentatonic scale as a ball's chain grows, so long bounces turn into a little melody.
 - Each ball sings in its own register (root, fifth, octave) and pans by its position on the board, so twelve balls in flight read as a chord spread across the stereo field instead of one unison pitch.
 - Hit brightness follows impact: soft taps are dull and quiet, hard hits are bright and short. A shared master bus with glue compression and a short plate tail keeps a burst of pin hits from clipping or turning to hiss.
-- A lucky pin firing a ball away has its own sound — a spring under tension, pitch falling as the ball leaves, with a bright click on top — layered over the pin's usual pentatonic note, so a kick reads as a mechanism and not a cartoon boing.
+- A lucky pin firing a ball away sounds like a **felt mallet on a marimba bar**: round, short, on the board's pentatonic ladder, with a soft wooden tick for the pin itself. The first version was a spring, a click and a burst of noise — exciting once, tiring after fifty. Bright, hissy, all attack. This one stays warm enough for a long session.
 - New chain tiers get an on-board callout and a brighter HUD pulse.
 - The board is lit like a parlor cabinet: every pocket glows in its own slot color, the center jackpot tower breathes gold, and a chase of 34 bulbs runs above the payout rail — slow at rest, brisk while balls are dropping, and sprinting when a jackpot is being decided.
 - Each ball carries a halo that brightens with its speed, pin hits bloom where they land, and the inner glass walls catch the marquee light while a slow reflection drifts across the cover, so the playfield reads as a lit box instead of a flat plane.
 - The wheel bezel's 32 bulbs are two comets that idle, race while the wheel spins, and bloom around the pointer when a result lands.
 - The wheel table is lit by a warm lamp: light pools around the bezel, falls across the top of the disc, and catches a few slow motes of dust drifting through it.
-- Opening the vault brings up its own room tone — a filtered low pad that breathes, a whisper of air, and an occasional soft chime from the shelves, so the wheel never sits in silence. It is mixed low on purpose and ducks out of the way the moment a spin starts, so it is scenery rather than something you have to listen through.
+- Opening the vault brings up its own room tone: a filtered low pad that breathes, plus an occasional soft chime from the shelves, so the wheel never sits in silence. There is deliberately **no noise layer** — the old whisper of air read as a buzz under everything and is gone. It is mixed low and ducks out of the way the moment a spin starts.
 - Spinning starts with the lever catching, a short breath of felt, and a quick four-note rising run — a wheel being pushed by someone who is looking forward to it. Under it, each rim tick has a wooden body under the click, every sixth tick rings a soft bell that climbs as the wheel slows, and the wheel settles with a low thud and an airy tail. The reward card gets a paper hush as it is set down.
 - **Skip.** While a spin is resolving, a floating **SKIP SPIN** pill appears. One tap jumps the wheel to its result, a second tap skips the rarity flicker and drops the card immediately. Skipping removes waiting, never information: the reward, the odds and the sounds are exactly the same.
 - **Every rarity has its own voice, at both sizes.** The rarity ladder on the reward card flickers past at the real odds, and each stop plays that tier's own preview: a dull wooden tap for Common, a brighter pair for Rare, a shimmering triad for Epic, a bell for Legendary, and a glass ping for Mythic that only appears when a real 1% flash goes past. The landing then plays the same ladder at full size — a token set down for Common, a blooming chord for Epic, and the full choir production for Mythic.
+- **The last ball of every run gets its own scene.** Once it is through the pin field, time stretches to about a quarter speed, the camera pushes in through the glass towards the ball, a **FINAL BALL** plate fades in over the playfield, and the room drops to a low swell with two heartbeats. Everything releases on the landing. It is driven by the physics, not scripted: if the last ball lands early, the scene ends early.
 - Rare pulls escalate instead of just showing a different label. **Legendary** adds a sub thud under the chord, a run of sparkles, a breath of air, a gold flash across the screen, a single sweep of light over the reward card, and a haptic double-tap.
 - **Mythic** gets its own production: a pink screen flash that pulses twice, two spark bursts plus a widening shockwave across the disc, a detuned choir holding under the arpeggio, a shimmer sweep, a cascade of high notes falling like sparks, an encore chord a beat later, a double sweep of light over the card, a pulsing card glow, a pink toast, and a longer haptic pattern. It is 1% for a reason, and the room is already quiet when it lands.
 - In the last second of a spin the room tone ducks away and a held **G** blooms underneath — the dominant of the C-major reveal — so the landing chord and the rarity roll resolve out of a pocket of quiet instead of over a busy room. The lamp dims with it, so the landing flash has somewhere to bloom from.
@@ -202,3 +203,5 @@ The game pauses its physics while the wheel overlay is open, then resumes the ex
 - `preview.png` — pachinko gameplay preview
 - `preview-wheel.png` — prize wheel preview
 - `preview-passport.png` — exported collection passport example
+- `desktop/NovaPachinko.cmd` — opens the game in a dedicated app window (no browser chrome, no throttling; `smooth` argument renders at 1× pixel scale)
+- `desktop/README.md` — what the launcher changes, and an honest note on frame rate
