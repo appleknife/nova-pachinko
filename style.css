@@ -26,6 +26,15 @@
 html,
 body {
   height: 100%;
+  /* Kills the double-tap-to-zoom delay/zoom without disabling pinch zoom. */
+  touch-action: manipulation;
+}
+
+button,
+canvas,
+.wheel-tab,
+.vault-filter {
+  touch-action: manipulation;
 }
 
 body {
@@ -1598,5 +1607,70 @@ h1 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Phone readability. The arcade micro-type is right on a desktop monitor and
+   too small at arm's length, so narrow screens get a larger, tighter-set
+   version of the same labels rather than a different look.
+--------------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .score-panel .label,
+  .chain-head span,
+  .chain-foot,
+  .token-copy small,
+  .token-cta {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  .resource span {
+    font-size: 9px;
+    letter-spacing: 0.07em;
+  }
+
+  .resource strong {
+    font-size: 19px;
+  }
+
+  .token-copy strong {
+    font-size: 14px;
+  }
+
+  .token-cta {
+    padding: 5px 9px;
+  }
+
+  .chain-head strong {
+    font-size: 13px;
+  }
+
+  .auto-btn span,
+  .quality-btn span {
+    font-size: 7.5px;
+    letter-spacing: 0.04em;
+  }
+
+  .drop-btn {
+    font-size: 11px;
+    letter-spacing: 0.07em;
+  }
+
+  .hint {
+    font-size: 9px;
+  }
+
+  .lucky-card small,
+  .vault-report-head,
+  .run-stat span,
+  .final-meta {
+    font-size: 8.5px;
+  }
+
+  .side-footer,
+  .corner-tag,
+  #reportNext {
+    font-size: 7.5px;
   }
 }

@@ -18,7 +18,7 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 
 - **Aim** by moving the pointer over the board.
 - **Drop** with a click/tap on the board, the **Drop Ball** button, or **Space**.
-- **Auto** **(A)** toggles auto drop: every remaining ball drops in a rapid stream, then the next run keeps going on its own. While it is on, the chute sweeps steadily across the board so the burst spreads over every slot instead of stacking in one lane, and the pointer stops steering the aim until you switch auto off.
+- **Sweep** (the **SWEEP** button, or **A**) toggles auto drop: every remaining ball drops in a rapid stream, then the next run keeps going on its own. While it is on, the chute sweeps steadily across the board so the burst spreads over every slot instead of stacking in one lane, and the pointer stops steering the aim until you switch auto off.
 - **R** restarts a run. **M** toggles sound.
 - **Render resolution** cycles **auto → high → low** with the gauge button next to restart (or **Q** on a keyboard). It is remembered between visits. Auto is the right choice for almost everyone; use **low** if a device still stutters, **high** if your GPU has headroom and you want maximum sharpness.
 - Every run starts with 12 balls by default. The board has a guarded center jackpot, two bonus-ball slots, and chain multipliers for pin hits. Relics can alter the starting count, chain cadence, lucky-ball cadence, score, bonus slots, and jackpot token payout.
@@ -94,9 +94,15 @@ The passport tab includes:
 
 All sharing works locally; there is no account or server.
 
+## On a phone
+
+- The layout is sized for a thumb, and double-tapping no longer zooms the page (pinch-zoom is still there when you want it).
+- The small arcade type in the HUD and the vault gets one step larger below 860 px, so labels stay readable at arm's length without turning the cabinet into a generic mobile card stack.
+- Render resolution defaults to a capped 1.75× backing store on touch devices, with the **RES** button available if a device still stutters.
+
 ## Other rules
 
-- **Gold pins** count as two bounce-chain hits and light up when struck.
+- **Gold pins** count as two bounce-chain hits, bounce livelier, and light up when struck. Each run rolls a fresh set of four lucky pins — three of the four big deflectors plus one random regular pin — so the hot lanes move from run to run instead of being memorized.
 - **Every fifth drop** is a lucky gold ball worth ×2 on its slot payout, unless a relic changes the cadence.
 - **Bonus slots** add a ball back to the run.
 - **Auto drop** is always available from the first run — it is a pace control, not a collection unlock.
@@ -170,7 +176,7 @@ Lighting is a single additive pass (`globalCompositeOperation = "lighter"`) over
 
 Performance is budgeted per device. The canvas backing store is capped (1.75× on touch devices, 2× on desktop) and an adaptive controller measures frame times: if frames run long it steps the render scale down, and once there is headroom it creeps back up. The **RES** button (or **Q**) overrides that guess (auto → high → low, remembered between sessions) for machines where the automatic choice is wrong. The cabinet, glass glare, trim, and the scanline texture are baked once and blitted, and every static gradient is cached, so a frame is just the playfield, the balls, and the additive light pass.
 
-Just as important, nothing expensive is left in CSS on an animating layer: the cabinet shadow is a `box-shadow` rather than a `drop-shadow` filter, the background orbs are soft gradients rather than a blurred container, and the vault overlay uses a dense tint instead of `backdrop-filter`. Those three were the main cause of frame drops in Safari and on phones, because each one forces a full-screen blur or filter pass every frame. Per-ball and per-pin canvas shadows are gone too; the cached glow sprites do that work.
+Just as important, nothing expensive is left in CSS on an animating layer: the cabinet shadow is a `box-shadow` rather than a `drop-shadow` filter, the background orbs are soft gradients rather than a blurred container, and the vault overlay is fully opaque instead of using `backdrop-filter`. Those three were the main cause of frame drops in Safari and on phones, because each one forces a full-screen blur or filter pass every frame. Per-ball and per-pin canvas shadows are gone too; the cached glow sprites do that work.
 
 The wheel's room tone is a small set of long-lived oscillators (a detuned low pad through a low-pass, one slow LFO, and a filtered noise loop) started when the vault opens and faded out when it closes, so it costs nothing while the board is being played.
 

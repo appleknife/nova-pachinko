@@ -121,6 +121,7 @@
 
   const pins = buildPins();
   const stars = buildStars();
+  shuffleGoldPins();
 
   const state = {
     status: "ready",
@@ -198,10 +199,10 @@
     }
 
     const specials = [
-      { x: 300, y: 401, r: 12.5, gold: true },
-      { x: 460, y: 515, r: 12.5, gold: true },
-      { x: 380, y: 686, r: 13, gold: true },
-      { x: 380, y: 835, r: 11.5, gold: true },
+      { x: 300, y: 401, r: 12.5, gold: false, big: true },
+      { x: 460, y: 515, r: 12.5, gold: false, big: true },
+      { x: 380, y: 686, r: 13, gold: false, big: true },
+      { x: 380, y: 835, r: 11.5, gold: false, big: true },
       { x: 248, y: 790, r: 8.5, gold: false },
       { x: 512, y: 790, r: 8.5, gold: false }
     ];
@@ -219,6 +220,30 @@
       id,
       flash: 0
     }));
+  }
+
+  // The lucky pins are worth extra chain, so where they sit matters. Rather
+  // than stamping the same four spots every run, each run rolls three of the
+  // four big deflectors plus one random regular pin.
+  function shuffleGoldPins() {
+    const big = [];
+    const small = [];
+    for (const pin of pins) {
+      pin.gold = false;
+      if (pin.big) big.push(pin);
+      else small.push(pin);
+    }
+
+    const pick = (list, count) => {
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+      return list.slice(0, count);
+    };
+
+    for (const pin of pick(big, 3)) pin.gold = true;
+    for (const pin of pick(small, 1)) pin.gold = true;
   }
 
   function buildStars() {
@@ -397,7 +422,7 @@
   function updateQualityUi() {
     if (!ui.qualityBtn || !ui.qualityLabel) return;
     const names = ["AUTO", "HIGH", "LOW"];
-    ui.qualityLabel.textContent = `RES ${names[qualityMode]}`;
+    ui.qualityLabel.textContent = names[qualityMode];
     ui.qualityBtn.classList.toggle("low", qualityMode === 2);
     ui.qualityBtn.setAttribute(
       "aria-label",
@@ -1029,7 +1054,7 @@
     const label = ui.autoBtn.querySelector("span");
     ui.autoBtn.classList.toggle("active", state.auto);
     ui.autoBtn.setAttribute("aria-pressed", String(state.auto));
-    if (label) label.textContent = state.auto ? "ON" : "AUTO";
+    if (label) label.textContent = state.auto ? "ON" : "SWEEP";
     if (ui.aimHint) {
       ui.aimHint.innerHTML = state.auto
         ? "Auto drop <span>·</span> sweeping the board"
@@ -1240,6 +1265,7 @@
 
     for (const pin of pins) pin.flash = 0;
     for (const slot of slots) slot.flash = 0;
+    shuffleGoldPins();
 
     ui.gameOver.classList.remove("show");
     ui.gameOver.setAttribute("aria-hidden", "true");
@@ -1899,6 +1925,44 @@
         ctx.lineTo(pin.x, pin.y + pin.r * 0.48);
         ctx.stroke();
         ctx.restore();
+      } else if (pin.big) {
+        // A big pin that is not gold this run reads as a steel bumper, so the
+        // board never grows a stray white ball.
+        ctx.fillStyle = "rgba(5, 7, 16, 0.5)";
+        ctx.beginPath();
+        ctx.arc(pin.x + 1.4, pin.y + 2, pin.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        const cap = ctx.createRadialGradient(
+          pin.x - pin.r * 0.32,
+          pin.y - pin.r * 0.36,
+          1,
+          pin.x,
+          pin.y,
+          pin.r * 1.12
+        );
+        cap.addColorStop(0, "#a7b2d4");
+        cap.addColorStop(0.5, "#4d5675");
+        cap.addColorStop(1, "#1a2036");
+        ctx.fillStyle = cap;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(198, 214, 255, 0.38)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(9, 12, 24, 0.85)";
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(190, 210, 255, 0.2)";
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, pin.r * 0.68, Math.PI * 1.05, Math.PI * 1.7);
+        ctx.stroke();
       } else {
         ctx.fillStyle = "rgba(5, 7, 16, 0.46)";
         ctx.beginPath();

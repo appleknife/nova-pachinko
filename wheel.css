@@ -8,9 +8,11 @@
   padding: 20px;
   background:
     radial-gradient(circle at 50% 35%, rgba(117, 83, 255, 0.16), transparent 34%),
-    rgba(2, 4, 10, 0.955);
-  /* No backdrop-filter: blurring the live board behind the overlay costs a
-     full-screen blur every frame on Safari. A denser tint reads the same. */
+    #02040a;
+  /* Fully opaque, and no backdrop-filter: blurring the live board behind the
+     overlay would cost a full-screen blur every frame on Safari. Opaque costs
+     nothing to composite and keeps the bright HUD and the board's slot numbers
+     from reading through the vault on a small screen. */
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -2436,5 +2438,75 @@
   .reward-card.mythic .reward-glow,
   .reward-card.legendary .reward-glow {
     animation: none;
+  }
+}
+
+/* Phone readability for the vault: same idea as the cabinet, one step up. */
+@media (max-width: 860px) {
+  .reward-top,
+  .reward-badge,
+  .rarity-step {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  #rewardRarity {
+    font-size: 8.5px;
+  }
+
+  .wheel-tab span {
+    font-size: 8px;
+  }
+
+  .odds-box summary {
+    font-size: 8.5px;
+  }
+
+  .game-toast {
+    padding: 11px 16px;
+    font-size: 9px;
+  }
+
+  /* Vault cards are read at arm's length for a long time, so the card meta
+     gets the same lift as the HUD labels. */
+  .vc-rarity,
+  .vc-count {
+    font-size: 8px;
+  }
+
+  .vc-bottom,
+  .vault-note,
+  .vault-hint,
+  .odds-foot {
+    font-size: 7.5px;
+  }
+
+  .odds-row,
+  .spin-cost,
+  .relic-blurb {
+    font-size: 9px;
+  }
+
+  .pity-row,
+  .relic-state,
+  .loadout-slot-copy span,
+  .passport-power span,
+  .passport-stats span,
+  .passport-showcase-head,
+  .passport-branches-head,
+  .passport-branch,
+  .passport-footer,
+  .compare-stat {
+    font-size: 7.5px;
+  }
+
+  .relic-effect,
+  .relic-progress-text,
+  .ps-copy span,
+  .compare-diff,
+  .passport-hint,
+  .passport-kicker,
+  .passport-card-top {
+    font-size: 8px;
   }
 }
