@@ -2869,7 +2869,9 @@
 
   function loadNumber(key, fallback) {
     try {
-      const value = Number(window.localStorage.getItem(key));
+      const raw = window.localStorage.getItem(key);
+      if (raw === null || raw === "") return fallback;
+      const value = Number(raw);
       return Number.isFinite(value) && value >= 0
         ? Math.floor(value)
         : fallback;

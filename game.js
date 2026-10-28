@@ -22,6 +22,7 @@
     aimHint: document.getElementById("aimHint"),
     resetBtn: document.getElementById("resetBtn"),
     soundBtn: document.getElementById("soundBtn"),
+    volumeSlider: document.getElementById("volumeSlider"),
     gameOver: document.getElementById("gameOver"),
     finalChip: document.getElementById("finalBallChip"),
     finalTitle: document.getElementById("finalTitle"),
@@ -178,6 +179,10 @@
   // 0 = auto (adapts), 1 = high (always full scale), 2 = low (always reduced).
   const QUALITY_KEY = "nova-pachinko-quality-v1";
   let qualityMode = clamp(loadNumber(QUALITY_KEY, 0), 0, 2);
+  // 1 = the tuned mix. The slider goes to 1.5 so the layers can be inspected
+  // by ear, and down to 0 to silence without flipping mute state.
+  const VOLUME_KEY = "nova-pachinko-volume-v1";
+  let masterVolume = clamp(loadNumber(VOLUME_KEY, 1), 0, 1.5);
   let quality = qualityMode === 2 ? 0.62 : 1;
   let slowFrames = 0;
   let fastFrames = 0;
@@ -196,6 +201,7 @@
   bindEvents();
   fitBacking();
   updateSoundButton();
+  updateVolumeUi();
   updateQualityUi();
   updateAutoButton();
   updateHud(true);
@@ -386,6 +392,20 @@
       toggleSound();
       ui.soundBtn.blur();
     });
+
+    if (ui.volumeSlider) {
+      ui.volumeSlider.addEventListener("input", () => {
+        masterVolume = clamp(Number(ui.volumeSlider.value) / 100, 0, 1.5);
+        applyMasterVolume();
+        // Touching the slider is a gesture, so it also wakes the audio context
+        // and gives feedback straight away instead of on the next drop.
+        ensureAudio();
+        sfxVolumeBlip();
+      });
+      ui.volumeSlider.addEventListener("change", () => {
+        saveNumber(VOLUME_KEY, masterVolume);
+      });
+    }
 
     window.addEventListener("nova:sfx", (event) => {
       handleNovaSfx(event.detail);
@@ -2810,7 +2830,7 @@
   // twelve balls never clips, plus a short plate tail for depth.
   function buildAudioBus(ac) {
     const master = ac.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = 0.9 * masterVolume;
 
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -13;
@@ -3690,9 +3710,42 @@
     tone(196, 0.5, "sine", 0.022, 196, 0, 0.34);
   }
 
+  // A small tick while dragging the volume, so the level can be set by ear
+  // without waiting for a drop. The pitch tracks the slider.
+  let lastVolumeBlipAt = -Infinity;
+  function sfxVolumeBlip() {
+    // A drag fires `input` many times a second; one tick every 45 ms keeps it
+    // a detent feel instead of a buzz.
+    const now = performance.now();
+    if (now - lastVolumeBlipAt < 45) return;
+    lastVolumeBlipAt = now;
+    const pitch = 420 + masterVolume * 200;
+    tone(pitch, 0.05, "sine", 0.02, pitch * 1.03, 0, 0, 0.05);
+  }
+
   function sfxReset() {
     tone(392, 0.09, "triangle", 0.018, 523);
     tone(523, 0.13, "sine", 0.018, 784, 0, 0.06);
+  }
+
+  function applyMasterVolume() {
+    if (audioBus) {
+      try {
+        audioBus.master.gain.value = 0.9 * masterVolume;
+      } catch {
+        // Suspended context; the value is applied again on resume.
+      }
+    }
+    updateVolumeUi();
+  }
+
+  function updateVolumeUi() {
+    if (!ui.volumeSlider) return;
+    const percent = Math.round(masterVolume * 100);
+    ui.volumeSlider.value = String(percent);
+    // The filled part of the track runs to 150, the slider's own maximum.
+    ui.volumeSlider.style.setProperty("--vol", `${(percent / 150) * 100}%`);
+    ui.volumeSlider.title = `Master volume ${percent}%`;
   }
 
   function toggleSound() {
@@ -3743,7 +3796,12 @@
 
   function loadNumber(key, fallback) {
     try {
-      const value = Number(window.localStorage.getItem(key));
+      const raw = window.localStorage.getItem(key);
+      // No key at all is not the number zero: `Number(null)` is 0, which would
+      // read an unset save as "muted to zero" for anything with a non-zero
+      // default (the master volume, for instance).
+      if (raw === null || raw === "") return fallback;
+      const value = Number(raw);
       return Number.isFinite(value) && value >= 0 ? value : fallback;
     } catch {
       return fallback;

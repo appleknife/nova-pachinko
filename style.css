@@ -195,6 +195,77 @@ body::after {
   text-shadow: 0 0 14px rgba(255, 193, 82, 0.8);
 }
 
+/* Master volume, next to the mute button. It exists so the mix can be checked
+   by ear without changing anything: 100 is the tuned level, up to 150 to hear
+   details, down to 0 to silence it without muting. */
+.audio-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.volume-slider {
+  --vol: 66.66%;
+  width: 82px;
+  /* Taller than the 3px track on purpose: the extra height is thumb-sized
+     touch area, and the track stays centred so nothing moves. */
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.volume-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 205, 122, 0.9) 0 var(--vol),
+    rgba(255, 255, 255, 0.13) var(--vol) 100%
+  );
+}
+
+.volume-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffd98f;
+  box-shadow: 0 0 10px rgba(255, 197, 92, 0.65);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.volume-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.volume-slider::-moz-range-progress {
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255, 205, 122, 0.9);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffd98f;
+  box-shadow: 0 0 10px rgba(255, 197, 92, 0.65);
+}
+
+.volume-slider:focus-visible {
+  outline: 2px solid rgba(77, 245, 221, 0.55);
+  outline-offset: 4px;
+  border-radius: 99px;
+}
+
 .sound-btn {
   width: 40px;
   height: 40px;
