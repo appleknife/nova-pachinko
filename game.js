@@ -35,7 +35,8 @@
     reportVault: document.getElementById("reportVault"),
     reportVaultFill: document.getElementById("reportVaultFill"),
     reportNext: document.getElementById("reportNext"),
-    announcer: document.getElementById("announcer")
+    announcer: document.getElementById("announcer"),
+    gameToast: document.getElementById("gameToast")
   };
 
   const W = 760;
@@ -157,12 +158,15 @@
   let tensionTimer = 0;
   let backingScale = 0;
   let scaleCap = 0;
-  let quality = 1;
+  // 0 = auto (adapts), 1 = high (always full scale), 2 = low (always reduced).
+  const QUALITY_KEY = "nova-pachinko-quality-v1";
+  let qualityMode = clamp(loadNumber(QUALITY_KEY, 0), 0, 2);
+  let quality = qualityMode === 2 ? 0.62 : 1;
   let slowFrames = 0;
   let fastFrames = 0;
   let layerScale = 0;
-  let cabinetBaseLayer = null;
-  let cabinetTopLayer = null;
+  let cabinetLayer = null;
+  let glassOverlayLayer = null;
   let glassBgGradient = null;
   let glassGlowGradient = null;
   let vignetteGradient = null;
@@ -262,6 +266,9 @@
       } else if (key === "a") {
         event.preventDefault();
         setAuto(!state.auto);
+      } else if (key === "q") {
+        event.preventDefault();
+        setQualityMode((qualityMode + 1) % 3);
       }
     });
 
@@ -361,13 +368,14 @@
 
   function fitBacking() {
     scaleCap = deviceScaleCap();
-    const next = clamp(scaleCap * quality, 0.85, scaleCap);
+    const next = clamp(scaleCap * quality, 0.55, scaleCap);
     if (Math.abs(next - backingScale) > 0.002) {
       backingScale = next;
       canvas.width = Math.round(W * next);
       canvas.height = Math.round(H * next);
       // Cached layers and gradients are baked at the old scale.
       layerScale = 0;
+      glassOverlayLayer = null;
       glassBgGradient = null;
       glassGlowGradient = null;
       vignetteGradient = null;
@@ -380,6 +388,7 @@
   // when there is headroom again. This is what keeps a slow phone smooth rather
   // than pretty-but-janky.
   function trackQuality(rawMs) {
+    if (qualityMode !== 0) return;
     if (!(rawMs > 0) || rawMs > 300) return;
 
     if (rawMs > 21) {
@@ -393,7 +402,7 @@
       fastFrames = 0;
     }
 
-    if (slowFrames >= 36 && quality > 0.64) {
+    if (slowFrames >= 30 && quality > 0.64) {
       quality = Math.max(0.64, quality - 0.16);
       slowFrames = 0;
       fitBacking();
@@ -404,30 +413,71 @@
     }
   }
 
+  // Manual override for machines where the automatic guess is wrong. Q cycles
+  // AUTO -> HIGH -> LOW and the choice is remembered.
+  function setQualityMode(mode) {
+    qualityMode = clamp(mode, 0, 2);
+    saveNumber(QUALITY_KEY, qualityMode);
+    quality = qualityMode === 2 ? 0.62 : 1;
+    slowFrames = 0;
+    fastFrames = 0;
+    fitBacking();
+    showGameToast(`QUALITY · ${["AUTO", "HIGH", "LOW"][qualityMode]}`);
+  }
+
+  let toastTimer = 0;
+
+  function showGameToast(message) {
+    if (!ui.gameToast) return;
+    ui.gameToast.textContent = message;
+    ui.gameToast.classList.remove("gold", "mythic");
+    ui.gameToast.classList.add("show");
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      ui.gameToast.classList.remove("show");
+    }, 1600);
+  }
+
   // The cabinet, the glass glare and the trim never change between frames, so
   // they are baked once into two layers: one behind the playfield, one on top.
   function buildCabinetLayers() {
-    if (cabinetBaseLayer && layerScale === backingScale) return;
+    if (cabinetLayer && layerScale === backingScale) return;
     layerScale = backingScale;
 
-    const makeLayer = (paint) => {
-      const layer = document.createElement("canvas");
-      layer.width = Math.max(1, Math.round(W * backingScale));
-      layer.height = Math.max(1, Math.round(H * backingScale));
-      const target = layer.getContext("2d");
-      const previous = ctx;
-      ctx = target;
-      ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
-      paint();
-      ctx = previous;
-      return layer;
-    };
-
-    cabinetBaseLayer = makeLayer(drawCabinetBase);
-    cabinetTopLayer = makeLayer(() => {
+    cabinetLayer = renderToLayer(W, H, () => {
+      drawCabinetBase();
+      drawGlassBackdrop();
       drawGlassOverlay();
       drawCabinetDetails();
     });
+  }
+
+  // Scanlines and the vignette are static too: pre-composite them into one
+  // glass-sized sprite so they cost a single blit instead of four full fills.
+  function buildGlassOverlayLayer() {
+    glassOverlayLayer = renderToLayer(GLASS.w, GLASS.h, () => {
+      ctx.translate(-GLASS.x, -GLASS.y);
+      ctx.save();
+      roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+      ctx.clip();
+      scanlinePattern = null;
+      drawScanlines();
+      drawVignette();
+      ctx.restore();
+    });
+  }
+
+  function renderToLayer(width, height, paint) {
+    const layer = document.createElement("canvas");
+    layer.width = Math.max(1, Math.round(width * backingScale));
+    layer.height = Math.max(1, Math.round(height * backingScale));
+    const target = layer.getContext("2d");
+    const previous = ctx;
+    ctx = target;
+    ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+    paint();
+    ctx = previous;
+    return layer;
   }
 
   function frame(now) {
@@ -485,8 +535,14 @@
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
 
-      ball.trail.push({ x: ball.x, y: ball.y });
-      if (ball.trail.length > 27) ball.trail.shift();
+      // Sample the trail every third step: the solver runs at 240 Hz, which is
+      // far more detail than a display can show, and this cuts the per-second
+      // allocations (and the number of trail circles drawn) by two thirds.
+      ball.trailPhase = (ball.trailPhase || 0) + 1;
+      if (ball.trailPhase % 3 === 0) {
+        ball.trail.push({ x: ball.x, y: ball.y });
+        if (ball.trail.length > 12) ball.trail.shift();
+      }
 
       const speed = Math.hypot(ball.vx, ball.vy);
       if (speed > MAX_SPEED) {
@@ -1376,9 +1432,8 @@
     ctx.translate(shakeX, shakeY);
 
     buildCabinetLayers();
-    ctx.drawImage(cabinetBaseLayer, 0, 0, W, H);
+    ctx.drawImage(cabinetLayer, 0, 0, W, H);
     drawGlassContents(dt);
-    ctx.drawImage(cabinetTopLayer, 0, 0, W, H);
 
     ctx.restore();
 
@@ -1446,7 +1501,9 @@
     ctx.restore();
   }
 
-  function drawGlassContents(dt) {
+  // The dark playfield backdrop never changes, so it is part of the baked
+  // cabinet layer instead of two full-glass fills every frame.
+  function drawGlassBackdrop() {
     ctx.save();
     roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
     ctx.clip();
@@ -1468,6 +1525,13 @@
     }
     ctx.fillStyle = glassGlowGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+    ctx.restore();
+  }
+
+  function drawGlassContents(dt) {
+    ctx.save();
+    roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+    ctx.clip();
 
     drawStarField();
     drawGrid();
@@ -1482,8 +1546,14 @@
     drawParticles();
     drawLights();
     drawFloatingTexts();
-    drawScanlines();
-    drawVignette();
+
+    // Scanlines + vignette are static, so they are pre-composited into one
+    // glass-sized sprite and blitted instead of four full-glass passes.
+    if (!glassOverlayLayer) buildGlassOverlayLayer();
+    if (glassOverlayLayer) {
+      ctx.drawImage(glassOverlayLayer, GLASS.x, GLASS.y, GLASS.w, GLASS.h);
+    }
+
     drawTensionOverlay();
 
     ctx.restore();
