@@ -3160,9 +3160,10 @@
     src.playbackRate.value = 0.93 + power * 0.17 + (Math.random() - 0.5) * 0.04;
 
     const gain = ac.createGain();
-    // The sample is peak-normalised to -6 dBFS; this keeps it the loudest board
-    // event without swallowing the pin notes underneath it.
-    gain.gain.value = 0.34 + power * 0.22;
+    // The sample is peak-normalised to -6 dBFS, which is hot next to the
+    // synthesised pin voices (~-26 dBFS), so it sits well back: audible over
+    // the field, never the loudest thing on the board.
+    gain.gain.value = 0.2 + power * 0.15;
     src.connect(gain);
     routeToBus(ac, gain, pan, wet);
     src.start(ac.currentTime);
@@ -3293,7 +3294,9 @@
     const power = clamp((launchSpeed || impact) / 1300, 0.4, 1);
     const pan = (Math.random() - 0.5) * 0.3;
 
-    if (playBumperSample(power, pan, 0.14)) return;
+    // A wider reverb send than the pins get, so the hit has a little room
+    // around it instead of stopping dead.
+    if (playBumperSample(power, pan, 0.3)) return;
 
     const base = 392 + power * 132; // G4 up towards B4 as the hit gets harder
     tone(base, 0.2, "sine", 0.03, base * 1.004, pan, 0, 0.18);
