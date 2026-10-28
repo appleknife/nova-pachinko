@@ -1,5 +1,7 @@
 # Nova Pachinko & the Nova Vault
 
+**Play it:** <https://appleknife.github.io/nova-pachinko/> — no install, no build step, works on desktop and phone. Add it to your home screen and it opens full-screen like an app.
+
 ![Nova Pachinko](preview.png)
 
 ![The Nova Prize Wheel](preview-wheel.png)
