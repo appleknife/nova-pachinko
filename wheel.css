@@ -1544,8 +1544,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #837b9b;
-  font-size: 6px;
+  color: #a79fbd;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.15em;
 }
@@ -1574,8 +1574,8 @@
 }
 
 .passport-kicker {
-  color: #8f789a;
-  font-size: 6px;
+  color: #b79ec4;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.18em;
 }
@@ -1598,8 +1598,8 @@
 
 .passport-power span {
   display: block;
-  color: #887b93;
-  font-size: 5.5px;
+  color: #a99cb8;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -1631,8 +1631,8 @@
 
 .passport-stats span {
   display: block;
-  color: #686f8d;
-  font-size: 5.5px;
+  color: #949dbd;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.09em;
 }
@@ -1657,8 +1657,8 @@
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  color: #6d7493;
-  font-size: 5.5px;
+  color: #949dbd;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -1729,14 +1729,14 @@
 
 .ps-copy span {
   color: rgb(var(--r-rgb));
-  font-size: 5px;
+  font-size: 6.5px;
   font-weight: 800;
   letter-spacing: 0.07em;
 }
 
 .passport-showcase-slot.empty .ps-copy strong {
-  color: #555d7b;
-  font-size: 6px;
+  color: #7f88a8;
+  font-size: 6.5px;
   font-weight: 600;
 }
 
@@ -1745,17 +1745,17 @@
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 10px;
+  gap: 8px 22px;
 }
 
 .passport-branch {
   min-width: 0;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 26px;
+  grid-template-columns: 60px minmax(0, 1fr) 30px;
   align-items: center;
   gap: 5px;
-  color: #666e8d;
-  font-size: 5.5px;
+  color: #939cbb;
+  font-size: 7.5px;
   font-weight: 800;
   letter-spacing: 0.05em;
 }
@@ -1767,10 +1767,12 @@
 }
 
 .passport-branch-bar {
-  height: 3px;
+  height: 4px;
   overflow: hidden;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.055);
+  /* The track sits on a dark card, so it needs a touch more contrast than it
+     did when the labels around it were dim too. */
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .passport-branch-bar i {
@@ -1782,7 +1784,7 @@
 }
 
 .passport-branch span:last-child {
-  color: #9a8a70;
+  color: #c1ad8d;
   font-family: var(--mono);
   font-weight: 400;
   text-align: right;
@@ -1796,8 +1798,8 @@
   justify-content: space-between;
   gap: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  color: #565c78;
-  font-size: 5.5px;
+  color: #828bab;
+  font-size: 7px;
   font-weight: 700;
   letter-spacing: 0.12em;
 }
@@ -1819,8 +1821,8 @@
 .passport-share p,
 .passport-rival p {
   margin: 5px 0 9px;
-  color: #737b99;
-  font-size: 7px;
+  color: #9ba4c1;
+  font-size: 8px;
   line-height: 1.5;
 }
 
@@ -1880,8 +1882,8 @@
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 7px;
-  color: #6e7594;
-  font-size: 5.5px;
+  color: #949dbd;
+  font-size: 7px;
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -1897,15 +1899,15 @@
 
 .compare-diff {
   margin: 6px 0 0;
-  color: #7e87a5;
-  font-size: 6px;
+  color: #a2abc7;
+  font-size: 7px;
   line-height: 1.4;
 }
 
 .passport-hint {
   margin: 0;
-  color: #555d7b;
-  font-size: 6px;
+  color: #8b93b0;
+  font-size: 7.5px;
   line-height: 1.5;
   letter-spacing: 0.04em;
 }
@@ -2547,7 +2549,23 @@
   .compare-diff,
   .passport-hint,
   .passport-kicker,
-  .passport-card-top {
+  .passport-card-top,
+  .compare-title,
+  #friendCode {
     font-size: 8.5px;
+  }
+
+  .passport-share p,
+  .passport-rival p {
+    font-size: 9.5px;
+    line-height: 1.5;
+  }
+
+  .passport-showcase-slot.empty .ps-copy strong {
+    font-size: 8px;
+    /* "CHOOSE IN VAULT" no longer fits on one line at this size, and an
+       ellipsis in a placeholder reads like a bug. */
+    white-space: normal;
+    line-height: 1.2;
   }
 }

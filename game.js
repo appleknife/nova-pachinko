@@ -48,6 +48,8 @@
   const FRAME = { x: 10, y: 10, w: 740, h: 1040, r: 38 };
   const GLASS = { x: 32, y: 76, w: 696, h: 950, r: 27 };
   const PLAY = { left: 58, right: 702, top: 136, bottom: 1014 };
+  // The pin grid is built on this centre line, so mirrored pieces stay mirrored.
+  const CENTER_X = 380;
   const SLOT_TOP = 900;
   const SLOT_BOTTOM = 1014;
   const GRAVITY = 1850;
@@ -138,6 +140,7 @@
     aimX: W / 2,
     lastDropAt: -9999,
     lastPinSound: 0,
+    lastBumperSound: 0,
     time: 0,
     slowMo: 0,
     tensionBall: null,
@@ -198,13 +201,21 @@
       }
     }
 
+    // The large deflectors are always mirrored about the centre line, so the
+    // mid-board reads as deliberate instead of lopsided. Which row the pair
+    // sits on, and how wide it is spread, is rolled per run: the shape of the
+    // board changes between runs while the bottom funnel that guards the
+    // jackpot stays put.
+    const pairInset = [87, 145][Math.floor(Math.random() * 2)];
+    const pairY = [346, 460, 574][Math.floor(Math.random() * 3)];
+
     const specials = [
-      { x: 300, y: 401, r: 12.5, gold: false, big: true },
-      { x: 460, y: 515, r: 12.5, gold: false, big: true },
-      { x: 380, y: 686, r: 13, gold: false, big: true },
-      { x: 380, y: 835, r: 11.5, gold: false, big: true },
-      { x: 248, y: 790, r: 8.5, gold: false },
-      { x: 512, y: 790, r: 8.5, gold: false }
+      { x: CENTER_X - pairInset, y: pairY, r: 12.5, gold: false, big: true },
+      { x: CENTER_X + pairInset, y: pairY, r: 12.5, gold: false, big: true },
+      { x: CENTER_X, y: 686, r: 13, gold: false, big: true },
+      { x: CENTER_X, y: 835, r: 11.5, gold: false, big: true },
+      { x: CENTER_X - 132, y: 790, r: 8.5, gold: false },
+      { x: CENTER_X + 132, y: 790, r: 8.5, gold: false }
     ];
 
     const filtered = base.filter((pin) => {
@@ -222,28 +233,36 @@
     }));
   }
 
-  // The lucky pins are worth extra chain, so where they sit matters. Rather
-  // than stamping the same four spots every run, each run rolls three of the
-  // four big deflectors plus one random regular pin.
+  // Rebuilds the whole board for a fresh run: the big deflectors move into a
+  // new mirrored arrangement and the lucky pins are rolled again.
+  function rebuildPins() {
+    const next = buildPins();
+    pins.length = 0;
+    for (const pin of next) pins.push(pin);
+    shuffleGoldPins();
+  }
+
+  // The lucky pins are worth extra chain and they kick, so where they sit
+  // matters. Rather than stamping the same four spots every run, each run
+  // rolls the mirrored pair, one jackpot guard, and one random regular pin.
   function shuffleGoldPins() {
-    const big = [];
+    const pair = [];
+    const guard = [];
     const small = [];
     for (const pin of pins) {
       pin.gold = false;
-      if (pin.big) big.push(pin);
-      else small.push(pin);
+      if (!pin.big) small.push(pin);
+      else if (pin.y < 600) pair.push(pin);
+      else guard.push(pin);
     }
 
-    const pick = (list, count) => {
-      for (let i = list.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [list[i], list[j]] = [list[j], list[i]];
-      }
-      return list.slice(0, count);
-    };
-
-    for (const pin of pick(big, 3)) pin.gold = true;
-    for (const pin of pick(small, 1)) pin.gold = true;
+    // The mirrored pair always matches: two lucky studs facing each other read
+    // as a design choice, while one gold and one plain looks like an error.
+    // The third lucky pin is one of the jackpot guards, and the fourth is a
+    // random regular pin.
+    for (const pin of pair) pin.gold = true;
+    if (guard.length) guard[Math.floor(Math.random() * guard.length)].gold = true;
+    if (small.length) small[Math.floor(Math.random() * small.length)].gold = true;
   }
 
   function buildStars() {
@@ -723,6 +742,30 @@
 
     ball.vx += (Math.random() - 0.5) * 14;
     ball.vy += (Math.random() - 0.5) * 4;
+
+    if (pin.gold && ny > -0.35) {
+      // Lucky pins are spring-loaded. Instead of quietly deflecting the ball
+      // they fire it back out along the contact normal, plus a sideways stir
+      // so a ball cannot pinball down the same line twice.
+      //
+      // Scaled by the impact, with no floor: a ball resting against a lucky
+      // pin is nudged, not launched forever, so nothing can bounce in place.
+      // A ball dropping straight onto the top of a lucky pin only gets the
+      // normal bounce, which keeps the funnel above the jackpot honest.
+      const kick = clamp(impact * 0.7, 0, 640);
+      const stir = 150 * clamp(impact / 300, 0, 1);
+      ball.vx += nx * kick + -ny * (Math.random() - 0.5) * stir;
+      ball.vy += ny * kick + nx * (Math.random() - 0.5) * stir;
+
+      const kickedAt = performance.now();
+      if (impact > 90 && kickedAt - state.lastBumperSound > 60) {
+        state.lastBumperSound = kickedAt;
+        sfxBumper(impact);
+        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.5 : 2.4);
+        spawnSparks(pin.x, pin.y, C.gold, 4, clamp(impact / 520, 0.6, 1.3));
+      }
+    }
+
     ball.slowTime = 0;
 
     if (impact > 26) {
@@ -1263,9 +1306,10 @@
     state.flash = 0;
     state.overTimer = 0;
 
-    for (const pin of pins) pin.flash = 0;
     for (const slot of slots) slot.flash = 0;
-    shuffleGoldPins();
+    // A new run gets a new board: mirrored deflectors in a new arrangement and
+    // freshly rolled lucky pins.
+    rebuildPins();
 
     ui.gameOver.classList.remove("show");
     ui.gameOver.setAttribute("aria-hidden", "true");
@@ -3052,6 +3096,15 @@
   function sfxGoldPin() {
     tone(1060, 0.14, "sine", 0.026, 1420, 0);
     tone(1590, 0.11, "triangle", 0.012, 1760, 0, 0.03);
+  }
+
+  // A spring under tension: the pitch falls as the ball leaves, with a bright
+  // click on top so it still reads as a mechanism rather than a cartoon boing.
+  function sfxBumper(impact) {
+    const power = clamp(impact / 620, 0.35, 1);
+    tone(180 + power * 260, 0.17 + power * 0.06, "triangle", 0.02 + power * 0.013, 92, 0, 0, 0.05);
+    tone(920 + power * 380, 0.06, "sine", 0.011 + power * 0.007, 620, 0, 0, 0.04);
+    tone(120, 0.13, "sine", 0.015, 74, 0, 0, 0.14);
   }
 
   function sfxChainUp(multiplier) {

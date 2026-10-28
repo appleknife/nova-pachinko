@@ -102,7 +102,8 @@ All sharing works locally; there is no account or server.
 
 ## Other rules
 
-- **Gold pins** count as two bounce-chain hits, bounce livelier, and light up when struck. Each run rolls a fresh set of four lucky pins — three of the four big deflectors plus one random regular pin — so the hot lanes move from run to run instead of being memorized. Large deflectors that did not roll lucky are cool satin studs, so a plain big pin still reads as part of the board.
+- **Gold pins** are spring-loaded. They count as two bounce-chain hits, light up when struck, and when a ball catches one off-centre it is **fired back out** with extra force instead of being quietly deflected. A ball that drops straight onto the top of one only gets an ordinary bounce, which keeps the funnel above the jackpot honest.
+- **The board reshapes every run.** The four large deflectors are always mirrored about the centre line — two lucky studs facing each other, plus the pair of guards above the jackpot — but which row the mirrored pair sits on, and how wide it is spread, is rolled per run. Each run also rolls four lucky pins: the mirrored pair, one jackpot guard, and one random regular pin. Large deflectors that did not roll lucky are cool satin studs, so a plain big pin still reads as part of the board.
 - **Every fifth drop** is a lucky gold ball worth ×2 on its slot payout, unless a relic changes the cadence.
 - **Bonus slots** add a ball back to the run.
 - **Auto drop** is always available from the first run — it is a pace control, not a collection unlock.
@@ -113,6 +114,7 @@ All sharing works locally; there is no account or server.
 - Pin notes climb a pentatonic scale as a ball's chain grows, so long bounces turn into a little melody.
 - Each ball sings in its own register (root, fifth, octave) and pans by its position on the board, so twelve balls in flight read as a chord spread across the stereo field instead of one unison pitch.
 - Hit brightness follows impact: soft taps are dull and quiet, hard hits are bright and short. A shared master bus with glue compression and a short plate tail keeps a burst of pin hits from clipping or turning to hiss.
+- A lucky pin firing a ball away has its own sound — a spring under tension, pitch falling as the ball leaves, with a bright click on top — layered over the pin's usual pentatonic note, so a kick reads as a mechanism and not a cartoon boing.
 - New chain tiers get an on-board callout and a brighter HUD pulse.
 - The board is lit like a parlor cabinet: every pocket glows in its own slot color, the center jackpot tower breathes gold, and a chase of 34 bulbs runs above the payout rail — slow at rest, brisk while balls are dropping, and sprinting when a jackpot is being decided.
 - Each ball carries a halo that brightens with its speed, pin hits bloom where they land, and the inner glass walls catch the marquee light while a slow reflection drifts across the cover, so the playfield reads as a lit box instead of a flat plane.
@@ -164,6 +166,8 @@ The browser saves:
 No server or account is involved.
 
 ## Under the hood
+
+Lucky pins add a launch impulse on top of the normal collision response, scaled by impact speed and skipped when a ball drops straight onto the top of the pin. Six-run headless samples (72 balls each) put the jackpot rate at 4-7 per sample with and without the kick, so the token economy is unchanged by it.
 
 The pachinko simulation runs at a fixed 240 Hz step, independent of display refresh rate:
 
