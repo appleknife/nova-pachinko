@@ -162,6 +162,9 @@
   let roomChimeTimer = 0;
   let tensionVoice = null;
   let tensionTimer = 0;
+  // The vault's room tone sits at this level whenever nothing is ducking it.
+  const ROOM_BED_LEVEL = 0.0105;
+  let spinTickCount = 0;
   let backingScale = 0;
   let scaleCap = 0;
   // 0 = auto (adapts), 1 = high (always full scale), 2 = low (always reduced).
@@ -242,27 +245,29 @@
     shuffleGoldPins();
   }
 
-  // The lucky pins are worth extra chain and they kick, so where they sit
-  // matters. Rather than stamping the same four spots every run, each run
-  // rolls the mirrored pair, one jackpot guard, and one random regular pin.
+  // The lucky pins are worth extra chain and they launch balls, so where they
+  // sit matters. Rather than stamping the same four spots every run, each run
+  // rolls the mirrored pair plus two regular pins from the field.
   function shuffleGoldPins() {
     const pair = [];
-    const guard = [];
     const small = [];
     for (const pin of pins) {
       pin.gold = false;
       if (!pin.big) small.push(pin);
       else if (pin.y < 600) pair.push(pin);
-      else guard.push(pin);
     }
 
     // The mirrored pair always matches: two lucky studs facing each other read
     // as a design choice, while one gold and one plain looks like an error.
-    // The third lucky pin is one of the jackpot guards, and the fourth is a
-    // random regular pin.
+    //
+    // The two guards above the jackpot are deliberately never lucky. They are
+    // the funnel, and a bumper there would fire balls away from the token slot.
     for (const pin of pair) pin.gold = true;
-    if (guard.length) guard[Math.floor(Math.random() * guard.length)].gold = true;
-    if (small.length) small[Math.floor(Math.random() * small.length)].gold = true;
+    for (let i = 0; i < 2 && small.length; i++) {
+      const index = Math.floor(Math.random() * small.length);
+      small[index].gold = true;
+      small.splice(index, 1);
+    }
   }
 
   function buildStars() {
@@ -743,26 +748,40 @@
     ball.vx += (Math.random() - 0.5) * 14;
     ball.vy += (Math.random() - 0.5) * 4;
 
-    if (pin.gold && ny > -0.35) {
-      // Lucky pins are spring-loaded. Instead of quietly deflecting the ball
-      // they fire it back out along the contact normal, plus a sideways stir
-      // so a ball cannot pinball down the same line twice.
-      //
-      // Scaled by the impact, with no floor: a ball resting against a lucky
-      // pin is nudged, not launched forever, so nothing can bounce in place.
-      // A ball dropping straight onto the top of a lucky pin only gets the
-      // normal bounce, which keeps the funnel above the jackpot honest.
-      const kick = clamp(impact * 0.7, 0, 640);
-      const stir = 150 * clamp(impact / 300, 0, 1);
-      ball.vx += nx * kick + -ny * (Math.random() - 0.5) * stir;
-      ball.vy += ny * kick + nx * (Math.random() - 0.5) * stir;
+    if (pin.gold) {
+      // A lucky pin is a bumper, not a bouncier pin. However fast the ball was
+      // travelling, it leaves fast: the launch speed is set outright instead of
+      // added to the bounce, which is the difference between "that felt like a
+      // nudge" and "that pin just fired my ball across the board".
+      const speedIn = Math.hypot(ball.vx, ball.vy);
+      const launch = clamp(820 + impact * 0.85, 820, 1360);
+      const target = Math.max(launch, speedIn * 0.92);
+
+      // Launch it down-field, never back up: a ball fired upward spends its
+      // energy flying against gravity, and the board reads better when a lucky
+      // pin punches the ball towards the payout rail.
+      let dirX = nx;
+      let dirY = Math.max(ny, 0.18);
+      if (ny < -0.35) {
+        // The ball is sitting on top of the pin. Firing it straight back up
+        // would let it hover there, so it is smacked down and out instead —
+        // towards the side it is already leaning to, or a coin flip.
+        const side = Math.abs(nx) > 0.08 ? Math.sign(nx) : Math.random() < 0.5 ? -1 : 1;
+        dirX = side;
+        dirY = 0.5;
+      }
+
+      const len = Math.hypot(dirX, dirY) || 1;
+      ball.vx = (dirX / len) * target;
+      ball.vy = (dirY / len) * target;
+      pin.flash = 1;
 
       const kickedAt = performance.now();
-      if (impact > 90 && kickedAt - state.lastBumperSound > 60) {
+      if (impact > 60 && kickedAt - state.lastBumperSound > 55) {
         state.lastBumperSound = kickedAt;
-        sfxBumper(impact);
-        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.5 : 2.4);
-        spawnSparks(pin.x, pin.y, C.gold, 4, clamp(impact / 520, 0.6, 1.3));
+        sfxBumper(impact, target);
+        state.shake = Math.max(state.shake, REDUCED_MOTION ? 0.8 : 4.2);
+        spawnSparks(pin.x, pin.y, C.gold, 9, 1.5);
       }
     }
 
@@ -2746,6 +2765,24 @@
     noise.stop(start + duration + 0.05);
   }
 
+  // Moves the room tone to a new level. Used to get out of the way of the
+  // spin, the landing and the reveal instead of fighting them.
+  function duckRoomBed(level, seconds) {
+    const ac = audioCtx;
+    if (!ac || !roomBed) return;
+    const now = ac.currentTime;
+    try {
+      roomBed.gain.gain.cancelScheduledValues(now);
+      roomBed.gain.gain.setValueAtTime(Math.max(0.0002, roomBed.gain.gain.value), now);
+      roomBed.gain.gain.exponentialRampToValueAtTime(
+        Math.max(0.0002, level),
+        now + Math.max(0.06, seconds || 0.2)
+      );
+    } catch {
+      // Suspended context; nothing to duck.
+    }
+  }
+
   // The vault has its own room tone while it is open: a filtered low pad and a
   // whisper of air, plus an occasional soft chime from the shelves. It fills the
   // silence between the board and the wheel without becoming a soundtrack.
@@ -2805,13 +2842,16 @@
     airFilter.frequency.value = 880;
     airFilter.Q.value = 0.55;
     const airGain = ac.createGain();
-    airGain.gain.value = 0.06;
+    // The air used to sit high enough to read as a buzz under everything else.
+    airGain.gain.value = 0.026;
     air.connect(airFilter).connect(airGain).connect(bed.sum);
     air.start(start);
     bed.voices.push(air);
 
     bed.gain.gain.setValueAtTime(0.0001, start);
-    bed.gain.gain.exponentialRampToValueAtTime(0.022, start + 1.3);
+    // Room tone is a bed, not a soundtrack: it has to sit clearly under the
+    // ticks, the landing and the reveal.
+    bed.gain.gain.exponentialRampToValueAtTime(ROOM_BED_LEVEL, start + 1.3);
     bed.sum.connect(bed.gain);
     routeToBus(ac, bed.gain, 0, 0.5);
 
@@ -2881,16 +2921,7 @@
     tensionVoice = voice;
 
     // Take the room down so the drone has somewhere to sit.
-    if (roomBed) {
-      const now = ac.currentTime;
-      try {
-        roomBed.gain.gain.cancelScheduledValues(now);
-        roomBed.gain.gain.setValueAtTime(Math.max(0.0002, roomBed.gain.gain.value), now);
-        roomBed.gain.gain.exponentialRampToValueAtTime(0.0055, now + 0.6);
-      } catch {
-        // Suspended context; nothing to duck.
-      }
-    }
+    duckRoomBed(0.0055, 0.6);
 
     // Safety net: if the landing event is ever missed (muting mid-spin, a tab
     // losing focus), the drone still releases instead of hanging forever.
@@ -2940,7 +2971,7 @@
         // Sink a little further into the quiet, then breathe back in as the
         // reward card appears.
         roomBed.gain.gain.exponentialRampToValueAtTime(0.0014, now + 0.7);
-        roomBed.gain.gain.exponentialRampToValueAtTime(0.022, now + 2.1);
+        roomBed.gain.gain.exponentialRampToValueAtTime(ROOM_BED_LEVEL, now + 2.1);
       } catch {
         // Suspended context; nothing to restore.
       }
@@ -3098,13 +3129,16 @@
     tone(1590, 0.11, "triangle", 0.012, 1760, 0, 0.03);
   }
 
-  // A spring under tension: the pitch falls as the ball leaves, with a bright
-  // click on top so it still reads as a mechanism rather than a cartoon boing.
-  function sfxBumper(impact) {
-    const power = clamp(impact / 620, 0.35, 1);
-    tone(180 + power * 260, 0.17 + power * 0.06, "triangle", 0.02 + power * 0.013, 92, 0, 0, 0.05);
-    tone(920 + power * 380, 0.06, "sine", 0.011 + power * 0.007, 620, 0, 0, 0.04);
-    tone(120, 0.13, "sine", 0.015, 74, 0, 0, 0.14);
+  // A spring under tension, with the launch under it: the pitch falls as the
+  // ball leaves, a bright click marks the release, air sells the speed, and a
+  // gold chime keeps it lucky rather than purely mechanical.
+  function sfxBumper(impact, launchSpeed) {
+    const power = clamp((launchSpeed || impact) / 1300, 0.4, 1);
+    tone(210 + power * 300, 0.2 + power * 0.08, "triangle", 0.034 + power * 0.02, 88, 0, 0, 0.06);
+    tone(980 + power * 420, 0.07, "sine", 0.02 + power * 0.012, 640, 0, 0, 0.05);
+    tone(118, 0.16, "sine", 0.026, 70, 0, 0, 0.16);
+    noiseSweep(2600, 700, 0.22, 0.008 + power * 0.005, 1.4, 0, 0.12);
+    tone(1568, 0.26, "sine", 0.012, 1568, 0, 0.03, 0.34);
   }
 
   function sfxChainUp(multiplier) {
@@ -3200,13 +3234,18 @@
         stopRoomAmbience();
         break;
       case "wheel-start":
-        // The lever engaging, then felt against the rim. This used to be a
-        // long band of air sweeping upward, which read as a buzz; a short
-        // falling brush plus a warm fifth sounds like a wheel being pushed.
-        tone(126, 0.1, "triangle", 0.03, 82, 0, 0, 0.03);
-        noiseSweep(1700, 320, 0.32, 0.0075, 0.85, 0, 0.2);
-        tone(196, 0.46, "sine", 0.019, 294, 0, 0.03, 0.12);
-        tone(294, 0.5, "triangle", 0.01, 392, 0, 0.05, 0.2);
+        // The lever engaging, then felt against the rim, then a short rising
+        // run that says "here we go". The room tone ducks underneath it so the
+        // spin has the stage instead of the room hum.
+        duckRoomBed(0.0042, 0.3);
+        tone(126, 0.1, "triangle", 0.034, 82, 0, 0, 0.03);
+        noiseSweep(1700, 320, 0.32, 0.009, 0.85, 0, 0.2);
+        tone(196, 0.46, "sine", 0.022, 294, 0, 0.03, 0.12);
+        tone(294, 0.5, "triangle", 0.012, 392, 0, 0.05, 0.2);
+        [523.25, 659.25, 783.99, 1046.5].forEach((hz, index) => {
+          tone(hz, 0.16, "triangle", 0.016, hz, 0, 0.16 + index * 0.075, 0.18);
+        });
+        spinTickCount = 0;
         break;
       case "vault-tab":
         // A page turning somewhere in the vault, not a UI beep.
@@ -3222,12 +3261,21 @@
           880 - progress * 360 + Math.random() * 24,
           0.014 + progress * 0.01,
           "sine",
-          0.0024 + progress * 0.0036,
+          0.0042 + progress * 0.0058,
           470,
           pan,
           0,
           0.06
         );
+
+        // Every sixth tick gets a soft bell that climbs as the wheel slows, so
+        // the reel has a little melody instead of being pure clicks.
+        spinTickCount += 1;
+        if (spinTickCount % 6 === 0) {
+          const melody = [784, 880, 988, 1046, 1174, 1318];
+          const note = melody[clamp(Math.floor(progress * melody.length), 0, melody.length - 1)];
+          tone(note, 0.24, "sine", 0.013, note, pan * 0.4, 0, 0.3);
+        }
         // A wooden body under the click so the pegs feel like they have weight.
         tone(
           196 - progress * 46 + Math.random() * 13,
@@ -3247,11 +3295,11 @@
       case "wheel-land":
         // Cut the drone first so the landing chord arrives in the quiet it made.
         endWheelTension();
-        tone(392, 0.16, "triangle", 0.03, 523);
-        tone(659, 0.26, "sine", 0.023, 988, 0, 0.08);
+        tone(392, 0.16, "triangle", 0.04, 523);
+        tone(659, 0.26, "sine", 0.031, 988, 0, 0.08);
         // The wheel settling into its pocket.
-        tone(96, 0.24, "sine", 0.02, 74, 0, 0, 0.08);
-        noiseSweep(1900, 420, 0.5, 0.007, 1.5, 0, 0.22);
+        tone(96, 0.24, "sine", 0.026, 74, 0, 0, 0.08);
+        noiseSweep(1900, 420, 0.5, 0.009, 1.5, 0, 0.22);
         break;
       case "rarity-tick":
         // The ladder flickering past. Each tier previews its own reveal in
@@ -3259,6 +3307,7 @@
         sfxRarityTick(Number(detail.rank) || 0);
         break;
       case "wheel-reveal":
+        duckRoomBed(ROOM_BED_LEVEL, 1.1);
         sfxWheelReveal(Number(detail.rank) || 0);
         // The reward card being set down on the table.
         tone(150, 0.14, "sine", 0.016, 104, 0, 0.02, 0.06);
@@ -3291,23 +3340,23 @@
     const pan = (Math.random() - 0.5) * 0.28;
 
     if (r === 0) {
-      tone(300, 0.075, "sine", 0.012, 268, pan, 0, 0.02);
+      tone(300, 0.075, "sine", 0.019, 268, pan, 0, 0.02);
     } else if (r === 1) {
-      tone(440, 0.085, "sine", 0.012, 440, pan, 0, 0.04);
-      tone(660, 0.07, "sine", 0.0045, 660, pan, 0.006, 0.07);
+      tone(440, 0.085, "sine", 0.019, 440, pan, 0, 0.04);
+      tone(660, 0.07, "sine", 0.007, 660, pan, 0.006, 0.07);
     } else if (r === 2) {
-      tone(587, 0.1, "triangle", 0.011, 587, pan, 0, 0.06);
-      tone(880, 0.08, "sine", 0.0055, 880, pan * 0.7, 0.007, 0.09);
-      tone(1174, 0.07, "sine", 0.0035, 1174, pan, 0.014, 0.12);
+      tone(587, 0.1, "triangle", 0.018, 587, pan, 0, 0.06);
+      tone(880, 0.08, "sine", 0.009, 880, pan * 0.7, 0.007, 0.09);
+      tone(1174, 0.07, "sine", 0.0058, 1174, pan, 0.014, 0.12);
     } else if (r === 3) {
-      tone(784, 0.12, "sine", 0.012, 784, pan, 0, 0.1);
-      tone(1174, 0.1, "sine", 0.0055, 1174, pan * 0.6, 0.008, 0.13);
-      tone(1568, 0.08, "sine", 0.0035, 1568, pan, 0.016, 0.16);
+      tone(784, 0.12, "sine", 0.019, 784, pan, 0, 0.1);
+      tone(1174, 0.1, "sine", 0.009, 1174, pan * 0.6, 0.008, 0.13);
+      tone(1568, 0.08, "sine", 0.0058, 1568, pan, 0.016, 0.16);
     } else {
-      tone(1046, 0.15, "sine", 0.012, 1046, pan, 0, 0.16);
-      tone(1568, 0.13, "sine", 0.0065, 1568, pan * 0.6, 0.01, 0.18);
-      tone(2093, 0.11, "sine", 0.004, 2093, pan, 0.02, 0.22);
-      tone(2637, 0.09, "sine", 0.0025, 2637, -pan, 0.03, 0.26);
+      tone(1046, 0.15, "sine", 0.019, 1046, pan, 0, 0.16);
+      tone(1568, 0.13, "sine", 0.0105, 1568, pan * 0.6, 0.01, 0.18);
+      tone(2093, 0.11, "sine", 0.0065, 2093, pan, 0.02, 0.22);
+      tone(2637, 0.09, "sine", 0.004, 2637, -pan, 0.03, 0.26);
     }
   }
 
@@ -3316,25 +3365,25 @@
 
     if (r === 0) {
       // Common: a token set down on the felt. No fanfare, no scolding.
-      tone(294, 0.14, "sine", 0.019, 262, 0, 0.02, 0.04);
-      tone(147, 0.2, "sine", 0.013, 128, 0, 0, 0.06);
+      tone(294, 0.14, "sine", 0.027, 262, 0, 0.02, 0.04);
+      tone(147, 0.2, "sine", 0.019, 128, 0, 0, 0.06);
       return;
     }
 
     if (r === 1) {
-      tone(392, 0.17, "triangle", 0.021, 392, 0, 0, 0.08);
-      tone(523, 0.22, "sine", 0.019, 523, 0, 0.06, 0.1);
-      tone(784, 0.18, "sine", 0.006, 784, 0, 0.11, 0.14);
+      tone(392, 0.17, "triangle", 0.029, 392, 0, 0, 0.08);
+      tone(523, 0.22, "sine", 0.026, 523, 0, 0.06, 0.1);
+      tone(784, 0.18, "sine", 0.009, 784, 0, 0.11, 0.14);
       return;
     }
 
     if (r === 2) {
       // Epic blooms into a chord with a shimmer opening behind it.
       [523, 659, 784].forEach((hz, index) => {
-        tone(hz, 0.22, "triangle", 0.021, hz, 0, index * 0.06, 0.1);
+        tone(hz, 0.22, "triangle", 0.028, hz, 0, index * 0.06, 0.1);
       });
-      tone(1046, 0.28, "sine", 0.012, 1046, 0, 0.18, 0.22);
-      tone(98, 0.32, "sine", 0.014, 88, 0, 0, 0.08);
+      tone(1046, 0.28, "sine", 0.017, 1046, 0, 0.18, 0.22);
+      tone(98, 0.32, "sine", 0.019, 88, 0, 0, 0.08);
       noiseSweep(1500, 5200, 0.55, 0.003, 2.2, 0, 0.3);
       return;
     }
@@ -3345,7 +3394,7 @@
         : [523, 659, 784, 1046, 1318];
     const air = r >= 4 ? 0.34 : 0.2;
     notes.forEach((frequency, index) => {
-      tone(frequency, 0.28, "sine", 0.028, frequency * 1.02, 0, index * 0.068, air);
+      tone(frequency, 0.28, "sine", 0.036, frequency * 1.02, 0, index * 0.068, air);
     });
 
     if (rank >= 3) {

@@ -36,6 +36,7 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - **Epic+ Spark** lets you spend 75 Dust to force the next rarity roll into the Epic+ pool.
 - **Relics** unlock when a full 10-item branch set is complete. Equip up to three to modify your runs.
 - **Passport** turns your collection into a downloadable share card, a copyable collection code, and a friend-comparison readout.
+- Spinning a lot of tokens? The **SKIP SPIN** pill turns each spin into two taps.
 
 ## Gacha odds
 
@@ -102,8 +103,9 @@ All sharing works locally; there is no account or server.
 
 ## Other rules
 
-- **Gold pins** are spring-loaded. They count as two bounce-chain hits, light up when struck, and when a ball catches one off-centre it is **fired back out** with extra force instead of being quietly deflected. A ball that drops straight onto the top of one only gets an ordinary bounce, which keeps the funnel above the jackpot honest.
-- **The board reshapes every run.** The four large deflectors are always mirrored about the centre line — two lucky studs facing each other, plus the pair of guards above the jackpot — but which row the mirrored pair sits on, and how wide it is spread, is rolled per run. Each run also rolls four lucky pins: the mirrored pair, one jackpot guard, and one random regular pin. Large deflectors that did not roll lucky are cool satin studs, so a plain big pin still reads as part of the board.
+- **Gold pins are bumpers.** They count as two bounce-chain hits, light up when struck, and any ball that touches one leaves at **launch speed** — around 820 to 1360 px/s, roughly three times a normal fall — instead of dribbling away at whatever speed it arrived with. The launch is aimed down-field, never back up the board, so a hit reads as the pin punching the ball towards the payout rail. A ball that lands on top of one is smacked down and out rather than straight back up, so nothing can hover on a bumper.
+- The two guards directly above the jackpot are deliberately never lucky: they are the funnel, and a bumper there would fire balls away from the token slot.
+- **The board reshapes every run.** The four large deflectors are always mirrored about the centre line — two lucky studs facing each other, plus the pair of guards above the jackpot — but which row the mirrored pair sits on, and how wide it is spread, is rolled per run. The four lucky pins each run are the mirrored pair plus two regular pins from the field. Large deflectors that did not roll lucky are cool satin studs, so a plain big pin still reads as part of the board.
 - **Every fifth drop** is a lucky gold ball worth ×2 on its slot payout, unless a relic changes the cadence.
 - **Bonus slots** add a ball back to the run.
 - **Auto drop** is always available from the first run — it is a pace control, not a collection unlock.
@@ -120,8 +122,9 @@ All sharing works locally; there is no account or server.
 - Each ball carries a halo that brightens with its speed, pin hits bloom where they land, and the inner glass walls catch the marquee light while a slow reflection drifts across the cover, so the playfield reads as a lit box instead of a flat plane.
 - The wheel bezel's 32 bulbs are two comets that idle, race while the wheel spins, and bloom around the pointer when a result lands.
 - The wheel table is lit by a warm lamp: light pools around the bezel, falls across the top of the disc, and catches a few slow motes of dust drifting through it.
-- Opening the vault brings up its own room tone — a filtered low pad that breathes, a whisper of air, and an occasional soft chime from the shelves, so the wheel never sits in silence.
-- Spinning starts with the lever catching and a short breath of felt, then warms into a rising fifth — a wheel being pushed, not a motor spinning up. Under it, each rim tick has a wooden body under the click, and the wheel settles with a low thud and an airy tail. The reward card gets a paper hush as it is set down.
+- Opening the vault brings up its own room tone — a filtered low pad that breathes, a whisper of air, and an occasional soft chime from the shelves, so the wheel never sits in silence. It is mixed low on purpose and ducks out of the way the moment a spin starts, so it is scenery rather than something you have to listen through.
+- Spinning starts with the lever catching, a short breath of felt, and a quick four-note rising run — a wheel being pushed by someone who is looking forward to it. Under it, each rim tick has a wooden body under the click, every sixth tick rings a soft bell that climbs as the wheel slows, and the wheel settles with a low thud and an airy tail. The reward card gets a paper hush as it is set down.
+- **Skip.** While a spin is resolving, a floating **SKIP SPIN** pill appears. One tap jumps the wheel to its result, a second tap skips the rarity flicker and drops the card immediately. Skipping removes waiting, never information: the reward, the odds and the sounds are exactly the same.
 - **Every rarity has its own voice, at both sizes.** The rarity ladder on the reward card flickers past at the real odds, and each stop plays that tier's own preview: a dull wooden tap for Common, a brighter pair for Rare, a shimmering triad for Epic, a bell for Legendary, and a glass ping for Mythic that only appears when a real 1% flash goes past. The landing then plays the same ladder at full size — a token set down for Common, a blooming chord for Epic, and the full choir production for Mythic.
 - Rare pulls escalate instead of just showing a different label. **Legendary** adds a sub thud under the chord, a run of sparkles, a breath of air, a gold flash across the screen, a single sweep of light over the reward card, and a haptic double-tap.
 - **Mythic** gets its own production: a pink screen flash that pulses twice, two spark bursts plus a widening shockwave across the disc, a detuned choir holding under the arpeggio, a shimmer sweep, a cascade of high notes falling like sparks, an encore chord a beat later, a double sweep of light over the card, a pulsing card glow, a pink toast, and a longer haptic pattern. It is 1% for a reason, and the room is already quiet when it lands.

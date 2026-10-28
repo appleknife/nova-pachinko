@@ -818,6 +818,41 @@
   transform: translateY(1px);
 }
 
+/* Floats above the vault while a spin is resolving: on a phone the spin
+   controls sit below the fold, and a skip button you have to scroll to is not
+   a skip button. */
+.skip-btn {
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  min-height: 46px;
+  padding: 0 24px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 231, 187, 0.3);
+  border-radius: 999px;
+  color: #ffe6b4;
+  background: rgba(10, 13, 26, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 14px 34px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  font-family: var(--ui);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  transition: background 140ms ease, border-color 140ms ease, transform 90ms ease;
+}
+
+.skip-btn:hover {
+  border-color: rgba(255, 231, 187, 0.5);
+  background: rgba(26, 30, 52, 0.96);
+}
+
+.skip-btn:active {
+  transform: translateX(-50%) translateY(1px);
+}
+
 .spin-btn:disabled {
   cursor: default;
   opacity: 0.42;
@@ -1964,6 +1999,11 @@
     top: auto;
     bottom: max(18px, env(safe-area-inset-bottom));
     transform: translate(-50%, 16px);
+  }
+
+  /* The toast owns the bottom edge on a phone, so the skip pill sits above it. */
+  .skip-btn {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
 
   .game-toast.show {

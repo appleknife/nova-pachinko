@@ -509,6 +509,7 @@
     vaultGrid: document.getElementById("vaultGrid"),
     spinBtn: document.getElementById("spinBtn"),
     spinBtnLabel: document.getElementById("spinBtnLabel"),
+    skipSpin: document.getElementById("skipSpin"),
     spinCost: document.getElementById("spinCost"),
     wheelStatus: document.getElementById("wheelStatus"),
     rewardCard: document.getElementById("rewardCard"),
@@ -602,6 +603,7 @@
     angle: -Math.PI / BRANCHES.length,
     spinning: false,
     busy: false,
+    revealTimer: 0,
     pending: null,
     lastResult: null,
     selectedIndex: -1,
@@ -1638,6 +1640,7 @@
     el.tabPassport.addEventListener("click", () => setTab("passport"));
 
     el.spinBtn.addEventListener("click", spinWheel);
+    el.skipSpin.addEventListener("click", skipSpin);
     el.sparkBtn.addEventListener("click", armSpark);
 
     el.vaultFilters.addEventListener("click", (event) => {
@@ -1872,6 +1875,10 @@
     const canSpin = tokens > 0 && !busy;
 
     el.spinBtn.disabled = !canSpin;
+    // Skip only exists while there is something to skip: a spin in flight, or
+    // the rarity ladder flickering towards its result.
+    el.skipSpin.hidden = !busy;
+    el.skipSpin.textContent = wheel.spinning ? "SKIP SPIN ▶▶" : "REVEAL NOW ▶▶";
     el.wheelClose.disabled = busy;
     el.tabWheel.disabled = busy;
     el.tabVault.disabled = busy;
@@ -2148,6 +2155,25 @@
     requestAnimationFrame(wheelLoop);
   }
 
+  // One tap finishes the spin, a second tap skips the rarity flicker. Both
+  // keep the real reward, the real odds and the real sounds: skipping only
+  // removes waiting, never information.
+  function skipSpin() {
+    if (wheel.spinning) {
+      wheel.spinning = false;
+      wheel.angle = wheel.spinTo;
+      finishSpin();
+      return;
+    }
+    if (wheel.busy && wheel.pending) {
+      if (wheel.revealTimer) {
+        window.clearTimeout(wheel.revealTimer);
+        wheel.revealTimer = 0;
+      }
+      revealReward();
+    }
+  }
+
   function finishSpin() {
     wheel.spinning = false;
     wheel.angle = normalizeAngle(wheel.spinTo);
@@ -2182,7 +2208,8 @@
       }, 85);
     }
 
-    window.setTimeout(() => {
+    wheel.revealTimer = window.setTimeout(() => {
+      wheel.revealTimer = 0;
       if (wheel.pending) revealReward();
     }, REDUCED_MOTION ? 220 : 680);
   }
@@ -2223,6 +2250,8 @@
 
     window.clearInterval(wheel.rarityRollTimer);
     wheel.rarityRollTimer = 0;
+    window.clearTimeout(wheel.revealTimer);
+    wheel.revealTimer = 0;
     el.rewardRarity.style.color = "";
 
     wheel.lastResult = result;
