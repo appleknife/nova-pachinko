@@ -3,7 +3,10 @@
   --bg: #04060d;
   --ink: #fff3dc;
   --muted: #8d93b7;
-  --faint: #555d83;
+  /* Was #555d83 - 2.9:1 on the panels, which is below the point where 8px
+     tracked capitals read as words. It is still the quietest tier, just
+     legible: 5.2:1. */
+  --faint: #7d86ab;
   --cyan: #4df5dd;
   --coral: #ff6677;
   --gold: #ffc75f;
@@ -535,8 +538,8 @@ h1 {
 
 .chain-foot {
   color: var(--faint);
-  font-size: 7px;
-  letter-spacing: 0.16em;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
 }
 
 #chainHits {
@@ -922,7 +925,7 @@ h1 {
 .hint {
   margin: 0;
   color: var(--faint);
-  font-size: 8px;
+  font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.13em;
   text-align: center;
@@ -940,8 +943,8 @@ h1 {
   gap: 12px;
   padding-top: 7px;
   border-top: 1px solid rgba(255, 255, 255, 0.055);
-  color: #454c6f;
-  font-size: 6px;
+  color: #7f88a8;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.19em;
 }
@@ -1025,8 +1028,8 @@ h1 {
 .corner-tag {
   position: absolute;
   bottom: 3.9%;
-  color: rgba(255, 245, 224, 0.26);
-  font-size: 6px;
+  color: rgba(255, 245, 224, 0.5);
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.22em;
   pointer-events: none;
@@ -1742,12 +1745,12 @@ h1 {
   .chain-foot,
   .token-copy small,
   .token-cta {
-    font-size: 8px;
-    letter-spacing: 0.1em;
+    font-size: 9px;
+    letter-spacing: 0.09em;
   }
 
   .resource span {
-    font-size: 9px;
+    font-size: 9.5px;
     letter-spacing: 0.07em;
   }
 
@@ -1769,8 +1772,8 @@ h1 {
 
   .auto-btn span,
   .quality-btn span {
-    font-size: 7.5px;
-    letter-spacing: 0.04em;
+    font-size: 8.5px;
+    letter-spacing: 0.03em;
   }
 
   .drop-btn {
@@ -1786,7 +1789,7 @@ h1 {
   .vault-report-head,
   .run-stat span,
   .final-meta {
-    font-size: 8.5px;
+    font-size: 9px;
   }
 
   .final-chip {
@@ -1796,7 +1799,7 @@ h1 {
 
   .side-footer,
   #reportNext {
-    font-size: 8px;
+    font-size: 8.5px;
   }
 
   /* These two are decorative on desktop, but at this size they were the

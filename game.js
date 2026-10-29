@@ -1769,9 +1769,12 @@
     ctx.stroke();
 
     ctx.textBaseline = "middle";
-    ctx.font = '800 12px Bahnschrift, "Trebuchet MS", sans-serif';
-    ctx.fillStyle = "#f0d49e";
-    drawSpacedText("NOVA  PACHINKO", W / 2, 42, 5.2);
+    // Plaque type scales with the cabinet too: on a phone the bitmap is ~0.49
+    // CSS px per board unit, so an unscaled 12px drew the marquee at 6 CSS px.
+    const plaqueScale = boardTypeScale;
+    ctx.font = `800 ${12 * plaqueScale}px Bahnschrift, "Trebuchet MS", sans-serif`;
+    ctx.fillStyle = "#f7dfb1";
+    drawSpacedText("NOVA  PACHINKO", W / 2, 42, 5.2 * plaqueScale);
 
     ctx.fillStyle = "rgba(255, 199, 95, 0.62)";
     drawDiamond(56, 41.5, 3.3);
@@ -1913,10 +1916,13 @@
     ctx.fillStyle = topGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, 92);
 
-    ctx.font = `700 ${7 * Math.min(boardTypeScale, 1.45)}px Bahnschrift, "Trebuchet MS", sans-serif`;
-    ctx.fillStyle = "rgba(213, 194, 166, 0.38)";
+    // No cap on the scale here: capping it below boardTypeScale is what made
+    // this label *smaller* on a phone than it is on a desktop monitor.
+    const zoneSize = 9.2 * boardTypeScale;
+    ctx.font = `700 ${zoneSize}px Bahnschrift, "Trebuchet MS", sans-serif`;
+    ctx.fillStyle = "rgba(230, 214, 186, 0.62)";
     ctx.textAlign = "center";
-    drawSpacedText("DROP ZONE", W / 2, 103, 2.6);
+    drawSpacedText("DROP ZONE", W / 2, 102, 2.4 * boardTypeScale);
 
     ctx.strokeStyle = "rgba(77, 245, 221, 0.13)";
     ctx.lineWidth = 1;
@@ -2042,11 +2048,11 @@
 
   function drawSlots() {
     ctx.save();
-    // Numbers scale with the board so they stay the same size on screen; the
-    // little sub-labels (PTS, BALL, JACKPOT) get a gentler lift so they still
-    // fit inside a narrow slot on a phone.
+    // Numbers scale with the board so they stay the same size on screen. The
+    // sub-labels (PTS, BALL, JACKPOT) scale with it too, then fitLabel trims
+    // them to the slot, which is what keeps a narrow jackpot slot honest.
     const big = boardTypeScale;
-    const small = Math.min(boardTypeScale, 1.45);
+    const small = boardTypeScale;
     const mono = '"Cascadia Mono", "Lucida Console", monospace';
     const ui = 'Bahnschrift, "Trebuchet MS", sans-serif';
     for (const slot of slots) {
@@ -2076,21 +2082,23 @@
         ctx.shadowColor = hexToRgba(C.gold, 0.7);
         ctx.shadowBlur = 12 + slot.flash * 20;
         fitLabel(slot.label, 19 * big, mono, 0, slot.w - 14);
-        ctx.fillStyle = "#ffe5a8";
-        ctx.fillText(slot.label, slot.center, SLOT_TOP + 45);
+        ctx.fillStyle = "#ffeab9";
+        ctx.fillText(slot.label, slot.center, SLOT_TOP + 42);
         ctx.restore();
 
-        const gap = fitLabel(slot.sub, 6.5 * small, ui, 1.4, slot.w - 12);
-        ctx.fillStyle = hexToRgba(C.gold, 0.72);
-        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 67, gap);
+        // Seven letters in the narrowest slot: keep the tracking tight so the
+        // word sits inside the dividers instead of touching them.
+        const gap = fitLabel(slot.sub, 10.2 * small, ui, 0.5, slot.w - 10);
+        ctx.fillStyle = "#ffe0a6";
+        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 77, gap);
       } else {
         fitLabel(slot.label, (slot.bonus ? 24 : 21) * big, mono, 0, slot.w - 14);
-        ctx.fillStyle = hexToRgba(slot.color, 0.82);
-        ctx.fillText(slot.label, slot.center, SLOT_TOP + 46);
+        ctx.fillStyle = tintHex(slot.color, 0.16);
+        ctx.fillText(slot.label, slot.center, SLOT_TOP + 42);
 
-        const gap = fitLabel(slot.sub, 7 * small, ui, 1.5, slot.w - 12);
-        ctx.fillStyle = hexToRgba(slot.color, 0.52);
-        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 68, gap);
+        const gap = fitLabel(slot.sub, 10.8 * small, ui, 0.9, slot.w - 12);
+        ctx.fillStyle = tintHex(slot.color, 0.42);
+        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 77, gap);
       }
 
       ctx.strokeStyle = hexToRgba(slot.color, 0.48);
@@ -3847,6 +3855,23 @@
     ui.soundBtn.setAttribute("aria-label", label);
     ui.soundBtn.setAttribute("aria-pressed", String(state.muted));
     ui.soundBtn.title = `${label} (M)`;
+  }
+
+  // Mixes a palette colour toward white. The slot labels used to be the raw hue
+  // at 52-82% alpha, which lands around 2.7-5:1 against the glass - fine for a
+  // 20px number, mush for a 6px one. Lifting the ink instead of the alpha keeps
+  // the slot's colour identity while the text clears the background.
+  function tintHex(hex, amount) {
+    const normalized = hex.replace("#", "");
+    const full = normalized.length === 3
+      ? normalized.split("").map((char) => char + char).join("")
+      : normalized;
+    const value = Number.parseInt(full, 16);
+    const mix = (channel) => Math.round(channel + (255 - channel) * amount);
+    const r = mix((value >> 16) & 255);
+    const g = mix((value >> 8) & 255);
+    const b = mix(value & 255);
+    return `rgb(${r}, ${g}, ${b})`;
   }
 
   function hexToRgba(hex, alpha) {
