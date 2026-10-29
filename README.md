@@ -41,16 +41,16 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 
 ## Gacha odds
 
-The same rates are available in the wheel under **FULL ODDS**.
+Every rate below is shown in-game too, under **FULL ODDS** in the wheel: the same percentages, with a `%` sign, split into the plain **BASE** roll and the long-run **AVG** once pity is mixed in.
 
 | Roll | Rate |
 | --- | --- |
 | Wheel branch | 8 branches, **12.5%** each |
-| Common | **58%** |
-| Rare | **25%** |
-| Epic | **11%** |
-| Legendary | **5%** |
-| Mythic | **1%** |
+| Rarity — Common | **58%** base · **56%** long run |
+| Rarity — Rare | **25%** base · **24%** long run |
+| Rarity — Epic | **11%** base · **14%** long run |
+| Rarity — Legendary | **5%** base · **5%** long run |
+| Rarity — Mythic | **1%** base · **1%** long run |
 | Item inside the chosen branch + rarity | 2 items, **50% / 50%** |
 | One specific Common item | 12.5% × 58% × 50% = **3.625%** |
 | One specific Rare item | 12.5% × 25% × 50% = **1.5625%** |
@@ -59,6 +59,8 @@ The same rates are available in the wheel under **FULL ODDS**.
 | One specific Mythic item | 12.5% × 1% × 50% = **0.0625%** |
 
 **Pity:** if a streak reaches 9 spins without an Epic or better, the 10th spin's normal rarity roll is replaced with a guaranteed Epic+ roll. The guarantee pool is **Epic 82%, Legendary 15%, Mythic 3%**. After any Epic+ result, the streak resets. An armed **Epic+ Spark** uses the same guarantee pool.
+
+**Where the long-run column comes from:** the pity streak reaches a steady state where pity rolls are **3.8%** of all spins, which pushes Epic+ from **17%** per spin to **20.1%** (one Epic+ every ~5 spins) and shaves the top off Common and Rare. Carrying the half-streaks around gives Common 55.8%, Rare 24.1%, Epic 13.7%, Legendary 5.4%, Mythic 1.1% — the `AVG` column rounds those. Chance of one *named* item, branch and coin flip included: **1 in 29** spins for a Common, **1 in 67** Rare, **1 in 117** Epic, **1 in 298** Legendary, **1 in 1,488** Mythic.
 
 **Token drops are not a fixed RNG rate.** A token is earned whenever a ball lands in the center jackpot; that frequency emerges from the board geometry, aiming, and physics. The **Encore** relic can add +1 token to each jackpot.
 

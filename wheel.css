@@ -661,6 +661,7 @@
 }
 
 .odds-box {
+  flex-shrink: 0;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 9px;
@@ -675,7 +676,7 @@
   list-style: none;
   color: #6c7492;
   cursor: pointer;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
   transition: color 150ms ease, background 150ms ease;
@@ -729,8 +730,8 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  color: #868eaf;
-  font-size: 8px;
+  color: #9aa2c0;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.04em;
 }
@@ -738,18 +739,77 @@
 .odds-row strong {
   color: #d3cfe0;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
   letter-spacing: 0.02em;
   text-align: right;
 }
 
+.odds-table {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.odds-tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px 46px;
+  align-items: baseline;
+  column-gap: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.odds-tr > span {
+  color: rgba(var(--r-rgb, 154, 164, 199), 0.95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.odds-tr strong,
+.odds-tr em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+
+.odds-tr strong {
+  color: #d3cfe0;
+}
+
+.odds-tr em {
+  color: #b3bad6;
+}
+
+.odds-head > span {
+  color: #929bb8;
+  font-size: 8px;
+  letter-spacing: 0.13em;
+}
+
+.odds-head > span:not(:first-child) {
+  text-align: right;
+}
+
 .odds-foot {
   margin: 3px 0 0;
-  color: #737b9a;
-  font-size: 7px;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
+  color: #8a92b0;
+  font-size: 8.5px;
+  line-height: 1.55;
+  letter-spacing: 0.015em;
+}
+
+.odds-foot b {
+  color: #cfd4e8;
+  font-weight: 800;
 }
 
 .pity-block {
@@ -2899,6 +2959,20 @@
 
 .odds-row strong {
   font-size: var(--fs-meta);
+}
+
+.odds-tr {
+  font-size: 9.5px;
+  grid-template-columns: minmax(0, 1fr) 52px 52px;
+}
+
+.odds-tr strong,
+.odds-tr em {
+  font-size: var(--fs-meta);
+}
+
+.odds-head > span {
+  font-size: 8.5px;
 }
 
 .odds-foot {
