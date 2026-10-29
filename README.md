@@ -47,7 +47,9 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - Spend **1 token** to spin. The wheel chooses 1 of 8 reward branches.
 - The selected branch then rolls a rarity and one of its 10 placeholder rewards.
 - **Vault** shows all 80 rewards across 8 branches and 5 rarities, with discovery state, duplicate counts, and five-step mastery bars.
-- **Duplicates** grant Nova Dust and raise that item's mastery, which increases Vault Power.
+- **Duplicates** grant Nova Dust, grant **shards** of that rarity, and raise that item's mastery, which increases Vault Power.
+- **Shards** are the answer to the last hole in a set. Every duplicate pays shards of its own rarity — Common 1, Rare 2, Epic 3, Legendary 5, Mythic 8 — and **10 of any one rarity forges any locked item of that rarity**. Reach ten and every locked card of that rarity stops saying LOCKED and starts offering FORGE; tap the card and the item is yours, with its mastery, its set progress and its relic credit. Five counters sit under the Vault filters, and they pulse when one is ready.
+- Saving a vault from before shards existed **credits every duplicate you ever pulled**, so an old save is not behind a new one.
 - **Epic+ Spark** lets you spend 75 Dust to force the next rarity roll into the Epic+ pool.
 - **Relics** unlock when a full 10-item branch set is complete. Equip up to three to modify your runs.
 - **Passport** turns your collection into a downloadable share card, a copyable collection code, and a friend-comparison readout.

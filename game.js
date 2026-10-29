@@ -4038,6 +4038,15 @@
         });
         spinTickCount = 0;
         break;
+      case "forge":
+        // A piece being set into its socket: a struck tick, then the shelf
+        // accepting it. Warmer and lower than the wheel's reveal stings, so
+        // forging has its own voice.
+        tone(196, 0.18, "triangle", 0.03, 164, 0, 0, 0.1);
+        tone(784, 0.1, "sine", 0.013, 1175, 0, 0.02, 0.18);
+        tone(523, 0.5, "sine", 0.019, 529, 0, 0.09, 0.3);
+        tone(659, 0.55, "sine", 0.013, 666, 0, 0.13, 0.3);
+        break;
       case "vault-tab":
         // A page turning somewhere in the vault, not a UI beep.
         tone(587, 0.07, "sine", 0.011, 784, 0, 0, 0.1);

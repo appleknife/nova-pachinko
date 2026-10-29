@@ -242,6 +242,20 @@
     mythic: 150
   };
 
+  // Duplicates used to make Dust and nothing else, and Dust has one use. Shards
+  // give a duplicate a second job: ten of one rarity forge *any* missing item
+  // of that rarity, which turns the last hole in a set from a lottery ticket
+  // into a plan. The rarer the duplicate, the more shards it is worth, so the
+  // five counters fill at roughly the same rate the wheel pays them out.
+  const SHARDS_PER_DUPE = {
+    common: 1,
+    rare: 2,
+    epic: 3,
+    legendary: 5,
+    mythic: 8
+  };
+  const FORGE_COST = 10;
+
   const POWER_BY_RARITY = {
     common: 1,
     rare: 3,
@@ -453,7 +467,8 @@
     loadout: "nova-pachinko-loadout-v1",
     showcase: "nova-pachinko-showcase-v1",
     showcaseCustom: "nova-pachinko-showcase-custom-v1",
-    spark: "nova-pachinko-spark-v1"
+    spark: "nova-pachinko-spark-v1",
+    shards: "nova-pachinko-shards-v1"
   };
 
   const el = {
@@ -507,6 +522,8 @@
     vaultFound: document.getElementById("vaultFound"),
     vaultTotal: document.getElementById("vaultTotal"),
     vaultFilters: document.getElementById("vaultFilters"),
+    vaultShards: document.getElementById("vaultShards"),
+    forgeHint: document.getElementById("forgeHint"),
     vaultGrid: document.getElementById("vaultGrid"),
     spinBtn: document.getElementById("spinBtn"),
     spinBtnLabel: document.getElementById("spinBtnLabel"),
@@ -586,9 +603,11 @@
 
   const vaultCards = new Map();
   const vaultFilters = new Map();
+  const shardChips = new Map();
 
   let tokens = loadNumber(STORAGE.tokens, 0);
   let collection = loadCollection();
+  const itemById = new Map(CATALOG.map((item) => [item.id, item]));
   let loadout = loadStringArray(STORAGE.loadout).slice(0, 3);
   let showcase = loadStringArray(STORAGE.showcase).slice(0, 3);
   let welcomeGranted = false;
@@ -629,6 +648,7 @@
     spins: loadNumber(STORAGE.spins, 0),
     dust: loadNumber(STORAGE.dust, 0),
     spark: loadBoolean(STORAGE.spark, false),
+    shards: loadShards(),
     loadout,
     showcase,
     showcaseCustom: loadBoolean(STORAGE.showcaseCustom, false),
@@ -641,6 +661,7 @@
   buildRarityLadder();
   buildVault();
   buildVaultFilters();
+  buildShardStrip();
   buildRelics();
   sanitizeLoadout();
   sanitizeShowcase();
@@ -670,6 +691,184 @@
     getBonuses,
     getProfile
   };
+
+  // ---- Shards ---------------------------------------------------------------
+  function emptyShards() {
+    return { common: 0, rare: 0, epic: 0, legendary: 0, mythic: 0 };
+  }
+
+  // Shards arrived after some vaults were already deep, so a save with no shard
+  // key is credited for every duplicate it ever pulled. Without that, a player
+  // with 200 pulls would start at zero and a fresh save would out-earn them.
+  function loadShards() {
+    const shards = emptyShards();
+    let raw = null;
+    try {
+      raw = window.localStorage.getItem(STORAGE.shards);
+    } catch {
+      raw = null;
+    }
+
+    if (raw === null) {
+      for (const item of CATALOG) {
+        const extra = (collection[item.id] || 0) - 1;
+        if (extra > 0) shards[item.rarityId] += extra * (SHARDS_PER_DUPE[item.rarityId] || 0);
+      }
+      saveShardsRaw(shards);
+      return shards;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) || {};
+      for (const rarity of RARITIES) {
+        const value = Number(parsed[rarity.id]);
+        shards[rarity.id] = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+      }
+    } catch {
+      // A corrupt value falls back to zero rather than breaking the vault.
+    }
+    return shards;
+  }
+
+  function saveShardsRaw(value) {
+    try {
+      window.localStorage.setItem(STORAGE.shards, JSON.stringify(value));
+    } catch {
+      // Storage can be unavailable in private or file contexts.
+    }
+  }
+
+  function saveShards() {
+    saveShardsRaw(wheel.shards);
+  }
+
+  function buildShardStrip() {
+    if (!el.vaultShards) return;
+    el.vaultShards.textContent = "";
+    shardChips.clear();
+
+    for (const rarity of RARITIES) {
+      const chip = document.createElement("div");
+      chip.className = "shard-chip";
+      chip.dataset.rarity = rarity.id;
+      chip.style.setProperty("--r-rgb", rarity.rgb);
+
+      const count = document.createElement("strong");
+      count.className = "shard-count";
+      count.textContent = "0";
+
+      const label = document.createElement("span");
+      label.className = "shard-label";
+      label.textContent = rarity.short;
+
+      chip.append(count, label);
+      el.vaultShards.appendChild(chip);
+      shardChips.set(rarity.id, chip);
+    }
+
+    updateShardStrip();
+  }
+
+  function updateShardStrip() {
+    for (const rarity of RARITIES) {
+      const chip = shardChips.get(rarity.id);
+      if (!chip) continue;
+      const value = wheel.shards[rarity.id] || 0;
+      const count = chip.querySelector(".shard-count");
+      if (count) count.textContent = String(value);
+      chip.classList.toggle("ready", value >= FORGE_COST);
+      chip.setAttribute(
+        "aria-label",
+        `${rarity.name}: ${value} shard${value === 1 ? "" : "s"}${
+          value >= FORGE_COST
+            ? `, enough to forge any locked ${rarity.name}`
+            : `, ${FORGE_COST - value} more to forge`
+        }`
+      );
+    }
+
+    // The one-line explanation only shows up once there is something to spend,
+    // so the vault hint stays about the showcase until forging is real.
+    if (el.forgeHint) {
+      const anyReady = RARITIES.some((rarity) => (wheel.shards[rarity.id] || 0) >= FORGE_COST);
+      if (el.forgeHint.hidden === anyReady) el.forgeHint.hidden = !anyReady;
+    }
+  }
+
+  function canForge(item) {
+    return (
+      (collection[item.id] || 0) === 0 &&
+      (wheel.shards[item.rarityId] || 0) >= FORGE_COST
+    );
+  }
+
+  // Spending shards is the one way to get a *specific* missing item, which is
+  // what makes the last two holes in a set feel achievable instead of cursed.
+  function forgeItem(itemId) {
+    if (wheel.busy) return;
+    const item = itemById.get(itemId);
+    if (!item || !canForge(item)) return;
+
+    const rarity = rarityById.get(item.rarityId);
+    const branch = branchById.get(item.branchId);
+
+    wheel.shards[rarity.id] = Math.max(0, (wheel.shards[rarity.id] || 0) - FORGE_COST);
+    saveShards();
+
+    collection[item.id] = 1;
+    saveCollection(collection);
+    if (!wheel.showcaseCustom && wheel.showcase.length < 3) {
+      wheel.showcase.push(item.id);
+      saveStringArray(STORAGE.showcase, wheel.showcase);
+    }
+
+    const result = {
+      branch,
+      rarity,
+      item,
+      count: 1,
+      isNew: true,
+      mastery: masteryLevel(1),
+      previousMastery: 0,
+      dustGain: 0,
+      shardGain: 0,
+      forged: true
+    };
+
+    wheel.lastResult = result;
+    wheel.pending = null;
+    wheel.flash = 1;
+    wheel.flashRgb = rarity.rgb;
+
+    renderResultCard(result, true);
+    highlightRarity(rarity);
+    updateCollectionUi();
+    updateWalletUi();
+    updatePityUi();
+    applyVaultFilter();
+
+    const card = vaultCards.get(item.id);
+    if (card) {
+      card.classList.remove("just-forged");
+      void card.offsetWidth;
+      card.classList.add("just-forged");
+      card.scrollIntoView({ block: "nearest" });
+    }
+
+    dispatchSfx("forge");
+    dispatchSfx("wheel-reveal", { rank: rarity.rank });
+    pulseHaptic(rarity.rank >= 2 ? [0, 22, 26, 48] : 18);
+    showToast(
+      `FORGED · ${item.name.toUpperCase()}`,
+      rarity.rank >= 3 ? "gold" : ""
+    );
+
+    const found = countFoundItems();
+    el.wheelStatus.textContent = `Forged from shards: ${item.name}. ${found} of ${TOTAL_ITEMS} collected.`;
+    window.dispatchEvent(
+      new CustomEvent("nova:collectionchange", { detail: getVaultSummary() })
+    );
+  }
 
   function buildRarityLadder() {
     for (const rarity of RARITIES) {
@@ -1720,7 +1919,24 @@
     el.vaultGrid.addEventListener("click", (event) => {
       const card = event.target.closest(".vault-card");
       if (!card) return;
+      const item = itemById.get(card.dataset.id);
+      // A forgeable card is a button: tapping it spends shards rather than
+      // trying to showcase something that is not in the vault yet.
+      if (item && canForge(item)) {
+        forgeItem(item.id);
+        return;
+      }
       toggleShowcase(card.dataset.id);
+    });
+
+    el.vaultGrid.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+      const card = event.target.closest(".vault-card[role='button']");
+      if (!card) return;
+      const item = itemById.get(card.dataset.id);
+      if (!item || !canForge(item)) return;
+      event.preventDefault();
+      forgeItem(item.id);
     });
 
     el.relicGrid.addEventListener("click", (event) => {
@@ -2028,15 +2244,39 @@
       card.classList.toggle("locked", count === 0);
       card.classList.toggle("discovered", count > 0);
       const countEl = card.querySelector(".vc-count");
-      if (countEl) countEl.textContent = count > 0 ? `×${count}` : "LOCKED";
+
+      // A locked card the player can afford stops saying LOCKED and starts
+      // offering the forge. The label lives in the slot the count already
+      // owns, so nothing about the card's size or grid rhythm moves.
+      const affordable = count === 0 && (wheel.shards[item.rarityId] || 0) >= FORGE_COST;
+      if (countEl) {
+        countEl.classList.toggle("can-forge", affordable);
+        countEl.textContent = count > 0 ? `×${count}` : affordable ? "FORGE ◆" : "LOCKED";
+      }
+      card.classList.toggle("forgeable", affordable);
+      if (affordable) {
+        card.setAttribute("role", "button");
+        card.setAttribute("tabindex", "0");
+        card.setAttribute(
+          "aria-label",
+          `Forge ${item.name}, ${(rarityById.get(item.rarityId) || {}).name || ""}, for ${FORGE_COST} shards`
+        );
+      } else {
+        card.removeAttribute("role");
+        card.removeAttribute("tabindex");
+        card.removeAttribute("aria-label");
+      }
 
       const level = masteryLevel(count);
       const pips = card.querySelectorAll(".vc-mastery i");
       pips.forEach((pip, index) => pip.classList.toggle("on", index < level));
+
       card.title = count > 0
         ? `${item.name} — ${count} copies · Mastery ${level}`
         : `${item.name} — locked`;
     }
+
+    updateShardStrip();
 
     if (!wheel.lastResult && !wheel.busy) {
       el.rewardBadge.textContent = `${found} / ${TOTAL_ITEMS} COLLECTED`;
@@ -2404,11 +2644,17 @@
     const previousMastery = masteryLevel(existing);
     const mastery = masteryLevel(count);
     const dustGain = existing > 0 ? DUST_BY_RARITY[rarity.id] : 0;
+    const shardGain = existing > 0 ? SHARDS_PER_DUPE[rarity.id] || 0 : 0;
 
     collection[item.id] = count;
     wheel.dust += dustGain;
     saveCollection(collection);
     saveNumber(STORAGE.dust, wheel.dust);
+
+    if (shardGain > 0) {
+      wheel.shards[rarity.id] = (wheel.shards[rarity.id] || 0) + shardGain;
+      saveShards();
+    }
 
     if (isNew && !wheel.showcaseCustom && wheel.showcase.length < 3) {
       wheel.showcase.push(item.id);
@@ -2423,7 +2669,8 @@
       isNew,
       mastery,
       previousMastery,
-      dustGain
+      dustGain,
+      shardGain
     };
 
     window.clearInterval(wheel.rarityRollTimer);
@@ -2447,7 +2694,9 @@
     const found = countFoundItems();
     el.wheelStatus.textContent = isNew
       ? `New discovery: ${item.name}. Mastery I. ${found} of ${TOTAL_ITEMS} collected.`
-      : `Duplicate secured: +${dustGain} Nova Dust.${mastery > previousMastery ? ` Mastery ${mastery} reached.` : ""} ${item.name} is now ×${count}.`;
+      : `Duplicate secured: +${dustGain} Nova Dust, +${shardGain} ${rarity.name} shard${
+          shardGain === 1 ? "" : "s"
+        }.${mastery > previousMastery ? ` Mastery ${mastery} reached.` : ""} ${item.name} is now ×${count}.`;
 
     pulseHaptic(
       rarity.rank >= 4
@@ -2529,9 +2778,11 @@
     el.rewardSymbol.textContent = branch.symbol;
     el.rewardName.textContent = item.name;
     el.rewardDesc.textContent = item.description;
-    el.rewardBadge.textContent = isNew
-      ? `NEW DISCOVERY · MASTERY I · ${found}/${TOTAL_ITEMS}`
-      : `DUPLICATE +${dustGain} DUST · M${mastery} · ×${count}`;
+    el.rewardBadge.textContent = result.forged
+      ? `FORGED FROM SHARDS · ${found}/${TOTAL_ITEMS}`
+      : isNew
+        ? `NEW DISCOVERY · MASTERY I · ${found}/${TOTAL_ITEMS}`
+        : `DUPLICATE +${dustGain} DUST · +${result.shardGain || 0} ◆ · M${mastery} · ×${count}`;
 
     if (animate) {
       void el.rewardCard.offsetWidth;

@@ -1109,11 +1109,98 @@
 }
 
 .vault-filters {
-  margin: 12px 0 10px;
+  margin: 12px 0 8px;
   padding-bottom: 2px;
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+}
+
+/* Five counters, one per rarity. They are the reason a duplicate is good news:
+   when one of them reaches ten, every locked card of that rarity grows a forge
+   button, so the vault shows you what is reachable rather than what is missing. */
+.shard-strip {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 9px;
+}
+
+.shard-chip {
+  --r-rgb: 146, 153, 183;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid rgba(var(--r-rgb), 0.2);
+  border-radius: 9px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(var(--r-rgb), 0.14), transparent 70%),
+    linear-gradient(160deg, rgba(20, 25, 48, 0.7), rgba(7, 10, 22, 0.7));
+  transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.shard-count {
+  color: rgb(var(--r-rgb));
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.shard-label {
+  color: rgba(var(--r-rgb), 0.78);
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.shard-chip.ready {
+  border-color: rgba(var(--r-rgb), 0.6);
+  animation: shard-ready 2.6s ease-in-out infinite;
+}
+
+@keyframes shard-ready {
+  0%, 100% { box-shadow: 0 0 0 rgba(var(--r-rgb), 0); }
+  50% { box-shadow: 0 0 18px rgba(var(--r-rgb), 0.3); }
+}
+
+/* Forging borrows the card that is already there: the LOCKED label becomes an
+   invitation, and the whole card becomes the button. Nothing about the grid
+   rhythm moves, which is what a wall of ten gold buttons would have done. */
+.vc-count.can-forge {
+  color: #ffd89a;
+  letter-spacing: 0.06em;
+}
+
+.vault-card.forgeable {
+  cursor: pointer;
+  border-color: rgba(255, 210, 140, 0.34);
+}
+
+.vault-card.forgeable:hover {
+  border-color: rgba(255, 218, 156, 0.62);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28), 0 0 20px rgba(255, 200, 110, 0.12);
+}
+
+.vault-card.forgeable:focus-visible {
+  outline: 2px solid rgba(255, 230, 170, 0.85);
+  outline-offset: 2px;
+}
+
+.vault-card.just-forged {
+  animation: forge-pop 720ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+@keyframes forge-pop {
+  0% { transform: scale(1); }
+  34% { transform: scale(1.06); }
+  100% { transform: scale(1); }
 }
 
 .vault-filter {
@@ -3067,6 +3154,15 @@
 .vc-rarity,
 .vc-count {
   font-size: 8.5px;
+}
+
+.shard-count {
+  font-size: 15px;
+}
+
+.shard-label {
+  font-size: 7px;
+  letter-spacing: 0.06em;
 }
 
 .vc-bottom {
