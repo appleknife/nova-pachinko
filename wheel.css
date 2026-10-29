@@ -1221,6 +1221,46 @@
   margin: 0 0 9px;
 }
 
+/* The rarity row: six buttons, filled with their own colour when active, so
+   "show me the mythics" reads as a state rather than a setting. */
+.vault-rarity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 9px;
+}
+
+.rarity-filter {
+  --r-rgb: 170, 178, 205;
+  padding: 5px 10px;
+  border: 1px solid rgba(var(--r-rgb), 0.22);
+  border-radius: 999px;
+  color: rgba(var(--r-rgb), 0.88);
+  background: rgba(7, 10, 22, 0.55);
+  font-family: var(--ui);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.rarity-filter:hover {
+  border-color: rgba(var(--r-rgb), 0.5);
+  color: rgb(var(--r-rgb));
+}
+
+.rarity-filter.active {
+  color: #0b0e18;
+  border-color: rgb(var(--r-rgb));
+  background: rgb(var(--r-rgb));
+}
+
+.rarity-filter:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
 .shard-chip {
   --r-rgb: 146, 153, 183;
   position: relative;
@@ -3261,6 +3301,11 @@
 
 .vault-pairs {
   font-size: 7.5px;
+}
+
+.rarity-filter {
+  padding: 5px 9px;
+  font-size: 8px;
 }
 
 .vault-filter {

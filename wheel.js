@@ -533,6 +533,7 @@
     vaultTotal: document.getElementById("vaultTotal"),
     vaultFilters: document.getElementById("vaultFilters"),
     vaultShards: document.getElementById("vaultShards"),
+    vaultRarity: document.getElementById("vaultRarity"),
     forgeHint: document.getElementById("forgeHint"),
     vaultHint: document.querySelector(".vault-hint"),
     vaultSky: document.getElementById("vaultSky"),
@@ -621,6 +622,7 @@
   const vaultCards = new Map();
   const vaultFilters = new Map();
   const shardChips = new Map();
+  const rarityFilters = new Map();
 
   // The 40 pairs, worked out once from the catalogue: { branchId, rarityId, ids }.
   const PAIRS = [];
@@ -677,6 +679,7 @@
     spins: loadNumber(STORAGE.spins, 0),
     dust: loadNumber(STORAGE.dust, 0),
     spark: loadBoolean(STORAGE.spark, false),
+    rarityFilter: null,
     shards: loadShards(),
     loadout,
     showcase,
@@ -707,6 +710,7 @@
   buildRarityLadder();
   buildVault();
   buildVaultFilters();
+  buildRarityFilters();
   buildShardStrip();
   buildRelics();
   sanitizeLoadout();
@@ -1608,6 +1612,39 @@
       el.vaultFilters.appendChild(filter);
       vaultFilters.set(branch.id, filter);
     }
+  }
+
+  // A second, independent filter: branch and rarity compose, so "mythics" or
+  // "everything still missing in LUNAR" are one click each. This is the row
+  // that answers "which ones am I missing" without scrolling eighty cards.
+  function buildRarityFilters() {
+    if (!el.vaultRarity) return;
+    el.vaultRarity.textContent = "";
+    rarityFilters.clear();
+
+    const entries = [{ id: "all", label: "ALL TIERS", rgb: "170, 178, 205" }].concat(
+      RARITIES.map((rarity) => ({ id: rarity.id, label: rarity.short, rgb: rarity.rgb }))
+    );
+
+    for (const entry of entries) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "rarity-filter";
+      button.dataset.rarity = entry.id;
+      button.style.setProperty("--r-rgb", entry.rgb);
+      button.textContent = entry.label;
+      button.setAttribute("aria-pressed", "false");
+      el.vaultRarity.appendChild(button);
+      rarityFilters.set(entry.id, button);
+    }
+  }
+
+  function setRarityFilter(rarityId) {
+    if (wheel.busy) return;
+    const next = rarityId === "all" || rarityId === wheel.rarityFilter ? null : rarityId;
+    wheel.rarityFilter = next;
+    applyVaultFilter();
+    el.vaultGrid.scrollTop = 0;
   }
 
   function makeFilterButton(id, label, rgb) {
@@ -2811,6 +2848,14 @@
       }).observe(el.vaultSky);
     }
 
+    if (el.vaultRarity) {
+      el.vaultRarity.addEventListener("click", (event) => {
+        const button = event.target.closest(".rarity-filter");
+        if (!button) return;
+        setRarityFilter(button.dataset.rarity);
+      });
+    }
+
     el.vaultFilters.addEventListener("click", (event) => {
       const button = event.target.closest(".vault-filter");
       if (!button) return;
@@ -3269,13 +3314,20 @@
       }
     }
 
+    for (const [id, button] of rarityFilters) {
+      const active = (wheel.rarityFilter || "all") === id;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+
     let visible = 0;
     for (const item of CATALOG) {
       const card = vaultCards.get(item.id);
       if (!card) continue;
-      const shown = filter === "showcase"
+      let shown = filter === "showcase"
         ? wheel.showcase.includes(item.id)
         : (filter === "all" || item.branchId === filter);
+      if (shown && wheel.rarityFilter && item.rarityId !== wheel.rarityFilter) shown = false;
       card.hidden = !shown;
       if (shown) visible += 1;
     }
@@ -3284,7 +3336,9 @@
       el.vaultEmpty.hidden = visible > 0;
       el.vaultEmpty.textContent = filter === "showcase"
         ? "Nothing on your passport yet. Click a discovered item to pin it here, then it shows up for your friends."
-        : "Nothing discovered in this branch yet.";
+        : wheel.rarityFilter
+          ? `Nothing ${(rarityById.get(wheel.rarityFilter) || {}).name || ""} here yet.`
+          : "Nothing discovered in this branch yet.";
     }
   }
 

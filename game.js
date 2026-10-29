@@ -207,7 +207,10 @@
     overflow: { active: false, resolved: false, hit: false, plunges: PLUNGE_BALLS },
     heat: 0,
     hot: false,
-    hotTimer: 0
+    hotTimer: 0,
+    // True while the ball in play is the overflow plunge, which gets a deeper
+    // cinema and its own tension cue.
+    plungeScene: false
   };
   state.runBestStart = state.best;
 
@@ -734,7 +737,10 @@
     // tease, and the two never stack into a freeze.
     let timeScale = slowMotion ? 0.34 : 1;
     if (state.cinema > 0.01) {
-      timeScale = Math.min(timeScale, 1 - 0.82 * state.cinema);
+      // The plunge goes deeper than a last ball: eight times slower at the rail
+      // rather than five, which is what makes the wait feel like a slot machine.
+      const depth = state.plungeScene ? 0.88 : 0.82;
+      timeScale = Math.min(timeScale, 1 - depth * state.cinema);
     }
 
     lastFrame = now;
@@ -764,6 +770,10 @@
   function updateCinema(dt) {
     const balls = state.activeBalls;
     let target = 0;
+    // A plunge is the same scene with the volume turned up: it starts higher up
+    // the board, so the machine leans in for longer before the ball lands.
+    const sceneTop = state.plungeScene ? 560 : 630;
+    const sceneSpan = state.plungeScene ? 260 : 230;
 
     // A scene already in progress keeps running until its ball lands. Latching
     // the run must never cut the scene short — that was the bug that made the
@@ -775,7 +785,7 @@
         !ball.captured &&
         balls.indexOf(ball) >= 0
       ) {
-        target = clamp((ball.y - 630) / 230, 0, 1);
+        target = clamp((ball.y - sceneTop) / sceneSpan, 0, 1);
         if (target > 0) state.cinemaFocus = { x: ball.x, y: ball.y - 26 };
       } else {
         state.sceneBall = null;
@@ -794,7 +804,7 @@
       !balls[0].captured
     ) {
       const ball = balls[0];
-      const ramp = clamp((ball.y - 630) / 230, 0, 1);
+      const ramp = clamp((ball.y - sceneTop) / sceneSpan, 0, 1);
       if (ramp > 0) {
         state.sceneBall = ball;
         state.finalBallDone = true;
@@ -813,7 +823,8 @@
 
     if (state.cinema > 0.32 && !state.cinemaFired) {
       state.cinemaFired = true;
-      sfxFinalBall();
+      if (state.plungeScene) sfxPlungeTension();
+      else sfxFinalBall();
       haptic(18);
     }
 
@@ -1301,6 +1312,25 @@
       sfxPocket(slot.value);
     }
 
+    if (plunging) {
+      state.plungeScene = false;
+      if (slot.jackpot) {
+        sfxPlungeWin();
+      } else {
+        // A miss is not a loss, and the sound should say so: the pot pays out
+        // either way, so this is a disappointed shrug, not a failure sting.
+        sfxPlungeMiss();
+        addFloatingText(
+          slot.center,
+          SLOT_TOP - 74,
+          `POT SAFE · ${state.pot}`,
+          "#bfe6d8",
+          19,
+          1.7
+        );
+      }
+    }
+
     spawnSparks(
       slot.center,
       SLOT_TOP + 24,
@@ -1452,6 +1482,7 @@
     state.overflow.active = true;
     state.overflow.resolved = false;
     state.overflow.hit = false;
+    state.plungeScene = true;
     state.status = "playing";
 
     ui.gameOver.classList.remove("show");
@@ -1811,6 +1842,7 @@
     state.heat = 0;
     state.hot = false;
     state.hotTimer = 0;
+    state.plungeScene = false;
     updatePotUi();
 
     state.status = "ready";
@@ -2073,7 +2105,7 @@
 
     // The cabinet stays put and the camera looks closer through the glass.
     if (state.cinema > 0.004 && state.cinemaFocus) {
-      const zoom = 1 + 0.38 * state.cinema;
+      const zoom = 1 + (state.plungeScene ? 0.48 : 0.38) * state.cinema;
       const fx = state.cinemaFocus.x;
       const fy = state.cinemaFocus.y;
       ctx.save();
@@ -3908,6 +3940,37 @@
   function sfxPlunge() {
     tone(110, 0.42, "triangle", 0.034, 220, 0, 0, 0.16);
     tone(330, 0.3, "sine", 0.016, 494, 0, 0.06, 0.2);
+  }
+
+  // The plunge: the room leans in further than it does for a final ball. A long
+  // sub swell, two heartbeats underneath, and a fifth that climbs and holds,
+  // unresolved, until the ball actually lands.
+  function sfxPlungeTension() {
+    tone(48, 1.6, "sine", 0.05, 41, 0, 0, 0.22);
+    tone(98, 1.3, "sine", 0.024, 104, 0, 0.06, 0.26);
+    [0, 0.44].forEach((offset) => {
+      tone(58, 0.18, "sine", 0.042, 46, 0, 0.34 + offset, 0.1);
+      tone(58, 0.13, "sine", 0.026, 44, 0, 0.51 + offset, 0.1);
+    });
+    tone(392, 1.6, "triangle", 0.011, 587, 0.1, 1.05, 0.32);
+  }
+
+  // The plunge found the jackpot: a riser running straight into the double-pot
+  // chord, so the win has an approach instead of just a hit.
+  function sfxPlungeWin() {
+    [392, 523, 659, 784].forEach((frequency, index) => {
+      tone(frequency, 0.16, "triangle", 0.019, frequency, 0, index * 0.055, 0.2);
+    });
+    tone(1568, 0.85, "sine", 0.01, 1580, 0, 0.26, 0.42);
+    tone(2093, 0.4, "sine", 0.006, 2100, 0, 0.34, 0.3);
+  }
+
+  // The plunge missed: two soft notes falling a step, and a low breath under
+  // them. Nothing sharp — the pot is safe, so this is a shrug, not a sting.
+  function sfxPlungeMiss() {
+    tone(330, 0.32, "sine", 0.026, 318, 0, 0, 0.24);
+    tone(262, 0.62, "sine", 0.022, 250, 0, 0.15, 0.32);
+    tone(131, 0.5, "triangle", 0.014, 120, 0, 0.15, 0.12);
   }
 
   // A plunge that lands: the pot doubles and the room says so.
