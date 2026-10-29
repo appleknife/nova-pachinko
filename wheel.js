@@ -468,7 +468,8 @@
     showcase: "nova-pachinko-showcase-v1",
     showcaseCustom: "nova-pachinko-showcase-custom-v1",
     spark: "nova-pachinko-spark-v1",
-    shards: "nova-pachinko-shards-v1"
+    shards: "nova-pachinko-shards-v1",
+    vaultView: "nova-pachinko-vault-view-v1"
   };
 
   const el = {
@@ -524,6 +525,12 @@
     vaultFilters: document.getElementById("vaultFilters"),
     vaultShards: document.getElementById("vaultShards"),
     forgeHint: document.getElementById("forgeHint"),
+    vaultHint: document.querySelector(".vault-hint"),
+    vaultSky: document.getElementById("vaultSky"),
+    skyCanvas: document.getElementById("skyCanvas"),
+    skyCaption: document.getElementById("skyCaption"),
+    viewGrid: document.getElementById("viewGrid"),
+    viewSky: document.getElementById("viewSky"),
     vaultGrid: document.getElementById("vaultGrid"),
     spinBtn: document.getElementById("spinBtn"),
     spinBtnLabel: document.getElementById("spinBtnLabel"),
@@ -644,6 +651,7 @@
     flash: 0,
     flashRgb: "255, 199, 95",
     filter: "all",
+    vaultView: loadBoolean(STORAGE.vaultView, false) ? "sky" : "grid",
     pity: clamp(loadNumber(STORAGE.pity, 0), 0, 9),
     spins: loadNumber(STORAGE.spins, 0),
     dust: loadNumber(STORAGE.dust, 0),
@@ -656,6 +664,21 @@
     rafActive: false,
     lastFocus: null,
     scale: 0
+  };
+
+  // Declared up here because the init sequence below touches it: the sky's
+  // layout functions live further down, but the state has to exist before the
+  // first updateCollectionUi() runs.
+  const sky = {
+    active: false,
+    canvasEl: el.skyCanvas,
+    ctx: null,
+    w: 0,
+    h: 0,
+    stars: [],
+    groups: [],
+    hover: null,
+    caption: ""
   };
 
   buildRarityLadder();
@@ -671,6 +694,7 @@
   updatePityUi();
   updateCollectionUi();
   applyVaultFilter();
+  setVaultView(wheel.vaultView, true);
   setTab("wheel", true);
   notifyLoadoutChange();
 
@@ -787,11 +811,19 @@
       );
     }
 
-    // The one-line explanation only shows up once there is something to spend,
-    // so the vault hint stays about the showcase until forging is real.
+    // The shard rule is always spelled out, because the first duplicate is the
+    // moment the counters start moving and the player deserves to know why.
+    // Once a forge is actually affordable it switches from a rule to an action.
     if (el.forgeHint) {
       const anyReady = RARITIES.some((rarity) => (wheel.shards[rarity.id] || 0) >= FORGE_COST);
-      if (el.forgeHint.hidden === anyReady) el.forgeHint.hidden = !anyReady;
+      const text = anyReady
+        ? " · <b>FORGE ◆</b> spends 10 shards on any locked item"
+        : " · 10 shards of one rarity forges any locked item";
+      if (el.forgeHint.dataset.state !== String(anyReady)) {
+        el.forgeHint.dataset.state = String(anyReady);
+        el.forgeHint.innerHTML = text;
+      }
+      el.forgeHint.hidden = false;
     }
   }
 
@@ -868,6 +900,394 @@
     window.dispatchEvent(
       new CustomEvent("nova:collectionchange", { detail: getVaultSummary() })
     );
+  }
+
+  // ---- Nova sky -------------------------------------------------------------
+  // The vault as a star map: one constellation per branch, ten stars each, laid
+  // out in rarity order from the tail (commons) to the head (mythics). Nothing
+  // is simulated — the map is derived from the branch list and the collection,
+  // so the sky and the grid can never disagree about what the player owns.
+  function layoutSky() {
+    if (!sky.ctx || sky.w < 60 || sky.h < 60) return;
+
+    const cx = sky.w / 2;
+    const cy = sky.h / 2;
+    const radius = Math.min(sky.w * 0.3, sky.h * 0.32);
+    const chord = 2 * radius * Math.sin(Math.PI / BRANCHES.length);
+    const spine = chord * 0.62;
+    const stars = [];
+    const groups = [];
+
+    BRANCHES.forEach((branch, b) => {
+      const angle = -Math.PI / 2 + (b * TAU) / BRANCHES.length;
+      const ox = cx + Math.cos(angle) * radius;
+      const oy = cy + Math.sin(angle) * radius;
+      const rot = angle + Math.PI / 2;
+
+      // A small seeded wobble per branch, so eight ladders do not look stamped
+      // out of the same die.
+      let seed = (0x9e3779b9 ^ (b * 2654435761)) >>> 0;
+      const rnd = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+      const bulge = (rnd() > 0.5 ? 1 : -1) * (4 + rnd() * 7);
+      const lean = (rnd() - 0.5) * 5;
+
+      const items = CATALOG.filter((item) => item.branchId === branch.id);
+      const groupStars = [];
+
+      items.forEach((item, i) => {
+        const pair = Math.floor(i / 2);
+        const side = i % 2 === 0 ? -1 : 1;
+        const t = (pair + 0.5) / 5;
+        const along = (t - 0.5) * spine + lean * (pair - 2) * 0.5;
+        const across = Math.sin(t * Math.PI) * bulge + side * (6 + pair * 1.1);
+        const x = ox + along * Math.cos(rot) - across * Math.sin(rot);
+        const y = oy + along * Math.sin(rot) + across * Math.cos(rot);
+
+        const star = {
+          x,
+          y,
+          b,
+          angle,
+          branch,
+          item,
+          rarity: rarityById.get(item.rarityId),
+          pair,
+          found: (collection[item.id] || 0) > 0
+        };
+        stars.push(star);
+        groupStars.push(star);
+      });
+
+      groups.push({
+        branch,
+        b,
+        angle,
+        ox,
+        oy,
+        stars: groupStars,
+        found: groupStars.filter((star) => star.found).length
+      });
+    });
+
+    sky.stars = stars;
+    sky.groups = groups;
+  }
+
+  let skyFitting = false;
+
+  function fitSkyCanvas() {
+    if (!sky.canvasEl) sky.canvasEl = el.skyCanvas;
+    if (!sky.canvasEl || skyFitting) return;
+
+    skyFitting = true;
+    try {
+      const rect = sky.canvasEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (width === sky.w && height === sky.h && sky.ctx) {
+        layoutSky();
+        return;
+      }
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      sky.w = width;
+      sky.h = height;
+      sky.canvasEl.width = Math.round(width * dpr);
+      sky.canvasEl.height = Math.round(height * dpr);
+      sky.ctx = sky.canvasEl.getContext("2d");
+      sky.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      layoutSky();
+      buildSkyBackdrop();
+    } finally {
+      skyFitting = false;
+    }
+  }
+
+  function skyCaptions() {
+    if (!sky.hover) {
+      const found = countFoundItems();
+      const complete = sky.groups.filter((group) => group.found === group.stars.length).length;
+      return `${found} of ${TOTAL_ITEMS} stars lit · ${complete} of ${BRANCHES.length} constellations complete`;
+    }
+    const owned = collection[sky.hover.item.id] || 0;
+    const head = `${sky.hover.branch.name.toUpperCase()} · ${sky.hover.rarity.name.toUpperCase()}`;
+    return owned > 0
+      ? `${head} · ${sky.hover.item.name} · ×${owned}`
+      : `${head} · ${sky.hover.item.name} · undiscovered`;
+  }
+
+  function setSkyCaption() {
+    if (!el.skyCaption) return;
+    const text = skyCaptions();
+    if (text !== sky.caption) {
+      sky.caption = text;
+      el.skyCaption.textContent = text;
+    }
+  }
+
+  function skyPick(event) {
+    if (!sky.stars.length) return null;
+    const rect = el.skyCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    let best = null;
+    let bestDistance = 19 * 19;
+
+    for (const star of sky.stars) {
+      const dx = star.x - x;
+      const dy = star.y - y;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = star;
+      }
+    }
+    return best;
+  }
+
+  // Gradients are expensive and canvas refuses to share them, so every glow is
+  // baked into a sprite once per colour and blitted. This is what keeps the sky
+  // cheap enough to animate on a phone.
+  const skySprites = new Map();
+
+  function skyGlowSprite(rgb) {
+    const cached = skySprites.get(rgb);
+    if (cached) return cached;
+
+    const size = 64;
+    const sprite = document.createElement("canvas");
+    sprite.width = size;
+    sprite.height = size;
+    const paint = sprite.getContext("2d");
+    const gradient = paint.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, `rgba(${rgb}, 0.55)`);
+    gradient.addColorStop(0.42, `rgba(${rgb}, 0.16)`);
+    gradient.addColorStop(1, `rgba(${rgb}, 0)`);
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, size, size);
+
+    skySprites.set(rgb, sprite);
+    return sprite;
+  }
+
+  function buildSkyBackdrop() {
+    const w = sky.w;
+    const h = sky.h;
+    if (!w || !h) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const backdrop = document.createElement("canvas");
+    backdrop.width = Math.round(w * dpr);
+    backdrop.height = Math.round(h * dpr);
+    const paint = backdrop.getContext("2d");
+    paint.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const nebula = paint.createRadialGradient(cx, cy, 6, cx, cy, Math.max(w, h) * 0.62);
+    nebula.addColorStop(0, "rgba(96, 76, 190, 0.17)");
+    nebula.addColorStop(0.55, "rgba(42, 50, 112, 0.07)");
+    nebula.addColorStop(1, "rgba(0, 0, 0, 0)");
+    paint.fillStyle = nebula;
+    paint.fillRect(0, 0, w, h);
+
+    paint.strokeStyle = "rgba(150, 168, 235, 0.07)";
+    paint.setLineDash([2, 10]);
+    paint.beginPath();
+    paint.arc(cx, cy, Math.min(w * 0.3, h * 0.32), 0, TAU);
+    paint.stroke();
+
+    // A field of dust, seeded so it does not shimmer between frames.
+    let seed = 0x1f123bb5;
+    for (let i = 0; i < 90; i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const x = (seed / 4294967296) * w;
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const y = (seed / 4294967296) * h;
+      paint.fillStyle = `rgba(210, 224, 255, ${0.04 + (i % 5) * 0.012})`;
+      paint.fillRect(x, y, 1, 1);
+    }
+
+    sky.backdrop = backdrop;
+  }
+
+  function renderSky(now) {
+    const ctx = sky.ctx;
+    if (!sky.active || !ctx || !sky.w) return;
+
+    const w = sky.w;
+    const h = sky.h;
+    const t = now / 1000;
+    const twinkle = REDUCED_MOTION ? 0 : t;
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(w * 0.3, h * 0.32);
+
+    ctx.clearRect(0, 0, w, h);
+    if (sky.backdrop) ctx.drawImage(sky.backdrop, 0, 0, w, h);
+
+    for (const group of sky.groups) {
+      const rgb = group.branch.rgb;
+      const stars = group.stars;
+      const complete = group.found === stars.length;
+
+      if (complete) {
+        ctx.globalAlpha = 0.5;
+        ctx.drawImage(skyGlowSprite(rgb), group.ox - 62, group.oy - 62, 124, 124);
+        ctx.globalAlpha = 1;
+      }
+
+      const link = (a, b, strength) => {
+        const alpha = a.found && b.found ? strength : a.found || b.found ? 0.14 : 0.05;
+        ctx.strokeStyle = `rgba(${rgb}, ${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      };
+
+      ctx.save();
+      ctx.lineWidth = 1;
+      for (let i = 0; i < stars.length; i += 2) link(stars[i], stars[i + 1], 0.66);
+      for (let i = 1; i < stars.length - 1; i += 2) link(stars[i], stars[i + 1], 0.44);
+      ctx.restore();
+
+      for (const star of stars) {
+        if (star.found) {
+          const pulse = REDUCED_MOTION ? 0.95 : 0.82 + Math.sin(twinkle * 1.5 + star.x * 0.04) * 0.16;
+          ctx.globalAlpha = pulse;
+          ctx.drawImage(skyGlowSprite(star.rarity.rgb), star.x - 13, star.y - 13, 26, 26);
+          ctx.globalAlpha = 1;
+
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * pulse})`;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, 2.5, 0, TAU);
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(${star.rarity.rgb}, ${0.8 * pulse})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, 4.1, 0, TAU);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = `rgba(${rgb}, 0.26)`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, 2.2, 0, TAU);
+          ctx.stroke();
+        }
+      }
+
+      if (sky.hover && sky.hover.b === group.b) {
+        const star = sky.hover;
+        ctx.strokeStyle = "rgba(255, 244, 214, 0.85)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, 7.5, 0, TAU);
+        ctx.stroke();
+      }
+
+      // The name sits outside the constellation, like a label on a chart.
+      const lx = group.ox + Math.cos(group.angle) * (radius * 0.26 + 20);
+      const ly = group.oy + Math.sin(group.angle) * (radius * 0.26 + 16);
+      const cos = Math.cos(group.angle);
+      const align = Math.abs(cos) < 0.3 ? "center" : cos > 0 ? "left" : "right";
+      const strength = 0.52 + (group.found / stars.length) * 0.48;
+
+      // Labels scale with the map, so a phone gets the same chart at a size it
+      // can still read instead of a shrunken desktop one.
+      const labelSize = Math.max(7.5, Math.min(9.5, w * 0.011));
+      ctx.save();
+      ctx.textAlign = align;
+      ctx.font = `800 ${labelSize}px Bahnschrift, "Trebuchet MS", sans-serif`;
+      ctx.fillStyle = `rgba(${rgb}, ${strength})`;
+      ctx.fillText(group.branch.short, lx, ly);
+      ctx.font = `400 ${labelSize - 0.5}px "Cascadia Mono", monospace`;
+      ctx.fillStyle = `rgba(${rgb}, ${strength * 0.75})`;
+      ctx.fillText(`${group.found}/${stars.length}`, lx, ly + labelSize + 2.5);
+      ctx.restore();
+    }
+
+    drawSkyCenter(ctx, cx, cy, t, radius);
+  }
+
+  function drawSkyCenter(ctx, cx, cy, t, radius) {
+    const found = countFoundItems();
+    const ratio = found / TOTAL_ITEMS;
+    const pulse = REDUCED_MOTION ? 0.86 : 0.78 + Math.sin(t * 1.3) * 0.1;
+    const size = Math.max(9, Math.min(sky.w, sky.h) * 0.042);
+
+    ctx.globalAlpha = (0.18 + ratio * 0.55) * pulse;
+    const reach = size * 3.4;
+    ctx.drawImage(skyGlowSprite("255, 208, 120"), cx - reach, cy - reach, reach * 2, reach * 2);
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = `rgba(255, 233, 184, ${0.28 + ratio * 0.68})`;
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.quadraticCurveTo(size * 0.14, -size * 0.14, size, 0);
+    ctx.quadraticCurveTo(size * 0.14, size * 0.14, 0, size);
+    ctx.quadraticCurveTo(-size * 0.14, size * 0.14, -size, 0);
+    ctx.quadraticCurveTo(-size * 0.14, -size * 0.14, 0, -size);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = '400 9px "Cascadia Mono", monospace';
+    ctx.fillStyle = `rgba(255, 226, 176, ${0.32 + ratio * 0.55})`;
+    ctx.fillText(`${found} / ${TOTAL_ITEMS}`, cx, cy + size + 14);
+    ctx.restore();
+  }
+
+  function updateSkyActive() {
+    sky.active = Boolean(wheel.open && wheel.tab === "vault" && wheel.vaultView === "sky");
+    if (sky.active) {
+      fitSkyCanvas();
+      setSkyCaption();
+    }
+  }
+
+  function setVaultView(view, force) {
+    if (wheel.busy && !force) return;
+    const next = view === "sky" ? "sky" : "grid";
+    if (wheel.vaultView === next && !force) return;
+
+    wheel.vaultView = next;
+    saveBoolean(STORAGE.vaultView, next === "sky");
+    const isSky = next === "sky";
+
+    if (el.vaultGrid) el.vaultGrid.hidden = isSky;
+    if (el.vaultSky) el.vaultSky.hidden = !isSky;
+    if (el.vaultFilters) el.vaultFilters.hidden = isSky;
+    if (el.vaultShards) el.vaultShards.hidden = isSky;
+    if (el.vaultHint) el.vaultHint.hidden = isSky;
+    if (el.vaultEmpty) el.vaultEmpty.hidden = true;
+
+    if (el.viewGrid) {
+      el.viewGrid.classList.toggle("active", !isSky);
+      el.viewGrid.setAttribute("aria-pressed", String(!isSky));
+    }
+    if (el.viewSky) {
+      el.viewSky.classList.toggle("active", isSky);
+      el.viewSky.setAttribute("aria-pressed", String(isSky));
+    }
+
+    if (isSky) {
+      sky.hover = null;
+      updateSkyActive();
+    } else {
+      sky.active = false;
+      applyVaultFilter();
+    }
+    if (!force) dispatchSfx("vault-tab");
   }
 
   function buildRarityLadder() {
@@ -1910,6 +2330,41 @@
     el.spinFiveBtn.addEventListener("click", () => spinBatch(5));
     el.sparkBtn.addEventListener("click", armSpark);
 
+    if (el.viewGrid) el.viewGrid.addEventListener("click", () => setVaultView("grid"));
+    if (el.viewSky) el.viewSky.addEventListener("click", () => setVaultView("sky"));
+
+    if (el.skyCanvas) {
+      el.skyCanvas.addEventListener("pointermove", (event) => {
+        const star = skyPick(event);
+        if (star !== sky.hover) {
+          sky.hover = star;
+          setSkyCaption();
+        }
+      });
+      el.skyCanvas.addEventListener("pointerleave", () => {
+        if (sky.hover) {
+          sky.hover = null;
+          setSkyCaption();
+        }
+      });
+      // A tap on a phone has no hover, so a tap pins the caption.
+      el.skyCanvas.addEventListener("pointerdown", (event) => {
+        sky.hover = skyPick(event);
+        setSkyCaption();
+      });
+    }
+
+    if (window.ResizeObserver && el.vaultSky) {
+      new ResizeObserver(() => {
+        if (!sky.active) return;
+        // Deferred by a frame: measuring inside the observer's own callback is
+        // how a resize loop starts.
+        requestAnimationFrame(() => {
+          if (sky.active) fitSkyCanvas();
+        });
+      }).observe(el.vaultSky);
+    }
+
     el.vaultFilters.addEventListener("click", (event) => {
       const button = event.target.closest(".vault-filter");
       if (!button) return;
@@ -2036,6 +2491,7 @@
     updateWalletUi();
     updatePityUi();
     updateCollectionUi();
+    updateSkyActive();
 
     if (tokens === 0 && !wheel.lastResult) {
       setTab("vault", true);
@@ -2079,6 +2535,7 @@
     el.wheelMode.classList.remove("open");
     el.wheelMode.setAttribute("aria-hidden", "true");
     if (el.main) el.main.inert = false;
+    sky.active = false;
 
     dispatchSfx("wheel-close");
 
@@ -2123,6 +2580,7 @@
     if (tab === "vault") updateCollectionUi();
     if (tab === "relics") updateRelicsUi();
     if (tab === "passport") updatePassportUi();
+    updateSkyActive();
 
     if (changed && !force) dispatchSfx("vault-tab");
 
@@ -2277,6 +2735,7 @@
     }
 
     updateShardStrip();
+    if (sky.ctx) layoutSky();
 
     if (!wheel.lastResult && !wheel.busy) {
       el.rewardBadge.textContent = `${found} / ${TOTAL_ITEMS} COLLECTED`;
@@ -2521,6 +2980,9 @@
     wheel.flash = Math.max(0, wheel.flash - dt * 2.1);
     updateBursts(dt);
     renderWheel(now);
+    // The sky only exists inside the wheel, so it borrows this frame instead of
+    // running a second animation loop of its own.
+    if (sky.active) renderSky(now);
     requestAnimationFrame(wheelLoop);
   }
 

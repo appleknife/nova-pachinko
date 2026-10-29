@@ -319,13 +319,27 @@
               <span class="wrapper-label">COLLECTION</span>
               <h3>THE NOVA VAULT</h3>
             </div>
-            <div class="vault-total"><strong id="vaultFound">0</strong><span>/ <span id="vaultTotal">80</span></span></div>
+            <div class="vault-head-right">
+              <div class="vault-total"><strong id="vaultFound">0</strong><span>/ <span id="vaultTotal">80</span></span></div>
+              <div class="vault-views" role="group" aria-label="Vault view">
+                <button id="viewGrid" class="vault-view active" type="button" aria-pressed="true">GRID</button>
+                <button id="viewSky" class="vault-view" type="button" aria-pressed="false">SKY</button>
+              </div>
+            </div>
           </header>
           <div id="vaultFilters" class="vault-filters" aria-label="Filter vault by branch"></div>
           <div id="vaultShards" class="shard-strip" aria-label="Rarity shards. Ten of one rarity forges any locked item of that rarity."></div>
-          <p class="vault-hint">Click a discovered item to showcase it on your passport · <span id="showcaseCount">0/3</span><span id="forgeHint" hidden> · <b>FORGE ◆</b> spends 10 shards on any locked item</span></p>
+          <p class="vault-hint">Click a discovered item to showcase it on your passport · <span id="showcaseCount">0/3</span><span id="forgeHint"> · 10 shards of one rarity forges any locked item</span></p>
           <p id="vaultEmpty" class="vault-empty" hidden></p>
           <div id="vaultGrid" class="vault-grid"></div>
+
+          <!-- The same 80 items as a sky: one constellation per branch, one star
+               per prize, drawn where they belong. -->
+          <div id="vaultSky" class="vault-sky" hidden>
+            <canvas id="skyCanvas" aria-label="Star map of the vault"></canvas>
+            <p id="skyCaption" class="sky-caption" aria-live="polite">Every prize is a star. Complete a constellation and it burns.</p>
+          </div>
+
           <p class="vault-note">PLACEHOLDER LOOT · SEASON 01 · 8 BRANCHES · 5 RARITIES</p>
         </section>
 
