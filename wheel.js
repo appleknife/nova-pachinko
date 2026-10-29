@@ -903,6 +903,67 @@
   }
 
   // ---- Nova sky -------------------------------------------------------------
+  // Hand-drawn constellations, one per branch, ten stars each (two per rarity).
+  // Points live in a [-1, 1] box that is scaled into the map; edges are drawn
+  // as a chart, not connected nearest-neighbour, so each shape stays the shape
+  // it was drawn as however the collection fills in. Shapes are never rotated —
+  // a rotated fox is just a mess.
+  const SKY_SHAPES = {
+    // A crescent, horns up-right.
+    lunar: {
+      points: [[0.17, -0.98], [0.67, -0.74], [0.96, -0.28], [0.96, 0.28], [0.67, 0.74], [0.17, 0.98], [0.23, 0.50], [0.51, 0.21], [0.51, -0.21], [0.23, -0.50]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 0]]
+    },
+    // A bolt: long diagonal, sharp step, long diagonal.
+    neon: {
+      points: [[0.55, -1.00], [0.27, -0.80], [-0.01, -0.60], [-0.30, -0.40], [-0.02, -0.40], [0.32, -0.40], [0.08, -0.04], [-0.20, 0.32], [-0.37, 0.66], [-0.55, 1.00]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9]]
+    },
+    // Three ripples leaving a source star.
+    echo: {
+      points: [[-0.80, -0.10], [-0.38, -0.26], [-0.20, 0.00], [-0.38, 0.26], [0.05, -0.51], [0.15, 0.00], [0.05, 0.51], [0.45, -0.81], [0.62, 0.00], [0.45, 0.81]],
+      edges: [[1, 2], [2, 3], [4, 5], [5, 6], [7, 8], [8, 9]]
+    },
+    // A ward: diamond, inner diamond, cross, keystone.
+    sigil: {
+      points: [[0, -1], [1, 0], [0, 1], [-1, 0], [0, -0.45], [0.45, 0], [0, 0.45], [-0.45, 0], [0, 0], [0, -0.72]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [8, 4], [8, 5], [8, 6], [8, 7], [0, 9], [9, 4]]
+    },
+    // The five-point star itself.
+    star: {
+      points: [[0, -1], [0.247, -0.34], [0.951, -0.309], [0.399, 0.13], [0.588, 0.809], [0, 0.42], [-0.588, 0.809], [-0.399, 0.13], [-0.951, -0.309], [-0.247, -0.34]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 0]]
+    },
+    // A cut crystal with a cross facet.
+    holo: {
+      points: [[0, -1], [0.75, -0.5], [0.75, 0.4], [0, 1], [-0.75, 0.4], [-0.75, -0.5], [0, -0.30], [0, 0.35], [-0.45, 0.0], [0.45, 0.0]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 7], [7, 3], [8, 9]]
+    },
+    // A pair of antlers.
+    wild: {
+      points: [[0.00, 1.00], [-0.22, 0.35], [-0.62, -0.05], [-0.55, -0.62], [-0.95, -0.30], [0.22, 0.35], [0.62, -0.05], [0.55, -0.62], [0.95, -0.30], [0.00, -0.45]],
+      edges: [[0, 1], [1, 2], [2, 3], [2, 4], [0, 5], [5, 6], [6, 7], [6, 8], [0, 9]]
+    },
+    // A rocket with fins and a plume.
+    boost: {
+      points: [[0, -1.0], [-0.35, -0.55], [-0.35, 0.35], [-0.8, 0.55], [0.8, 0.55], [0.35, 0.35], [0.35, -0.55], [-0.20, 0.75], [0, 1.0], [0.20, 0.75]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 0], [2, 7], [7, 8], [8, 9], [9, 5]]
+    }
+  };
+
+  // Only used if a branch ever ships without a drawing: a plain ladder keeps the
+  // map honest instead of throwing.
+  function fallbackShape(count) {
+    const points = [];
+    for (let i = 0; i < count; i++) {
+      const row = Math.floor(i / 2);
+      points.push([(i % 2 === 0 ? -1 : 1) * 0.35, (row / 4 - 0.5) * 1.7]);
+    }
+    const edges = [];
+    for (let i = 0; i < count - 1; i++) edges.push([i, i + 1]);
+    return { points, edges };
+  }
+
   // The vault as a star map: one constellation per branch, ten stars each, laid
   // out in rarity order from the tail (commons) to the head (mythics). Nothing
   // is simulated — the map is derived from the branch list and the collection,
@@ -912,9 +973,11 @@
 
     const cx = sky.w / 2;
     const cy = sky.h / 2;
-    const radius = Math.min(sky.w * 0.3, sky.h * 0.32);
+    const radius = Math.min(sky.w * 0.33, sky.h * 0.32);
     const chord = 2 * radius * Math.sin(Math.PI / BRANCHES.length);
-    const spine = chord * 0.62;
+    // Each drawing spans two units across, so this is the half-width budget:
+    // big enough to read, small enough to leave the ring a gap.
+    const scale = chord * 0.44;
     const stars = [];
     const groups = [];
 
@@ -924,37 +987,23 @@
       const oy = cy + Math.sin(angle) * radius;
       const rot = angle + Math.PI / 2;
 
-      // A small seeded wobble per branch, so eight ladders do not look stamped
-      // out of the same die.
-      let seed = (0x9e3779b9 ^ (b * 2654435761)) >>> 0;
-      const rnd = () => {
-        seed = (seed * 1664525 + 1013904223) >>> 0;
-        return seed / 4294967296;
-      };
-      const bulge = (rnd() > 0.5 ? 1 : -1) * (4 + rnd() * 7);
-      const lean = (rnd() - 0.5) * 5;
-
       const items = CATALOG.filter((item) => item.branchId === branch.id);
       const groupStars = [];
+      const shape = SKY_SHAPES[branch.id];
+      const drawing = shape && shape.points.length === items.length
+        ? shape
+        : fallbackShape(items.length);
 
       items.forEach((item, i) => {
-        const pair = Math.floor(i / 2);
-        const side = i % 2 === 0 ? -1 : 1;
-        const t = (pair + 0.5) / 5;
-        const along = (t - 0.5) * spine + lean * (pair - 2) * 0.5;
-        const across = Math.sin(t * Math.PI) * bulge + side * (6 + pair * 1.1);
-        const x = ox + along * Math.cos(rot) - across * Math.sin(rot);
-        const y = oy + along * Math.sin(rot) + across * Math.cos(rot);
-
+        const point = drawing.points[i];
         const star = {
-          x,
-          y,
+          x: ox + point[0] * scale,
+          y: oy + point[1] * scale,
           b,
           angle,
           branch,
           item,
           rarity: rarityById.get(item.rarityId),
-          pair,
           found: (collection[item.id] || 0) > 0
         };
         stars.push(star);
@@ -968,6 +1017,8 @@
         ox,
         oy,
         stars: groupStars,
+        edges: drawing.edges,
+        scale,
         found: groupStars.filter((star) => star.found).length
       });
     });
@@ -1126,7 +1177,7 @@
     const twinkle = REDUCED_MOTION ? 0 : t;
     const cx = w / 2;
     const cy = h / 2;
-    const radius = Math.min(w * 0.3, h * 0.32);
+    const radius = Math.min(w * 0.33, h * 0.32);
 
     ctx.clearRect(0, 0, w, h);
     if (sky.backdrop) ctx.drawImage(sky.backdrop, 0, 0, w, h);
@@ -1143,7 +1194,9 @@
       }
 
       const link = (a, b, strength) => {
-        const alpha = a.found && b.found ? strength : a.found || b.found ? 0.14 : 0.05;
+        // Unlit links stay visible: an empty constellation should read as a
+        // chart of something, not as a hole in the sky.
+        const alpha = a.found && b.found ? strength : a.found || b.found ? 0.22 : 0.11;
         ctx.strokeStyle = `rgba(${rgb}, ${alpha})`;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -1153,8 +1206,11 @@
 
       ctx.save();
       ctx.lineWidth = 1;
-      for (let i = 0; i < stars.length; i += 2) link(stars[i], stars[i + 1], 0.66);
-      for (let i = 1; i < stars.length - 1; i += 2) link(stars[i], stars[i + 1], 0.44);
+      for (const [from, to] of group.edges) {
+        const a = stars[from];
+        const b = stars[to];
+        if (a && b) link(a, b, 0.62);
+      }
       ctx.restore();
 
       for (const star of stars) {
@@ -1175,10 +1231,10 @@
           ctx.arc(star.x, star.y, 4.1, 0, TAU);
           ctx.stroke();
         } else {
-          ctx.strokeStyle = `rgba(${rgb}, 0.26)`;
+          ctx.strokeStyle = `rgba(${rgb}, 0.3)`;
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(star.x, star.y, 2.2, 0, TAU);
+          ctx.arc(star.x, star.y, 2.4, 0, TAU);
           ctx.stroke();
         }
       }
@@ -1192,10 +1248,16 @@
         ctx.stroke();
       }
 
-      // The name sits outside the constellation, like a label on a chart.
-      const lx = group.ox + Math.cos(group.angle) * (radius * 0.26 + 20);
-      const ly = group.oy + Math.sin(group.angle) * (radius * 0.26 + 16);
-      const cos = Math.cos(group.angle);
+      // The name sits outside the constellation, like a label on a chart —
+      // except on a narrow map, where the ring is close enough to the edge that
+      // an outward label would be clipped. There it moves inside the ring, into
+      // the empty band between the constellations and the centre.
+      const narrow = w < 560;
+      const labelGap = group.scale * 1.05 + 10;
+      const dir = narrow ? -1 : 1;
+      const lx = group.ox + Math.cos(group.angle) * labelGap * dir;
+      const ly = group.oy + Math.sin(group.angle) * (labelGap - 2) * dir;
+      const cos = Math.cos(group.angle) * dir;
       const align = Math.abs(cos) < 0.3 ? "center" : cos > 0 ? "left" : "right";
       const strength = 0.52 + (group.found / stars.length) * 0.48;
 
