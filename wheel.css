@@ -1102,6 +1102,23 @@
   font-size: 11px;
 }
 
+/* Forty natural pairs sit inside the eighty items; this is how many of them
+   are whole. */
+.vault-pairs {
+  color: #7d86ab;
+  font-size: 6.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.vault-pairs strong {
+  color: #c0c8e4;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
 .vault-total strong {
   color: var(--gold);
   font-size: 24px;
@@ -3203,6 +3220,10 @@
 .vault-total {
   color: #9aa3c0;
   font-size: 12px;
+}
+
+.vault-pairs {
+  font-size: 7.5px;
 }
 
 .vault-filter {

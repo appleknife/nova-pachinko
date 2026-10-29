@@ -255,6 +255,10 @@
     mythic: 8
   };
   const FORGE_COST = 10;
+  // Every branch holds exactly two items per rarity, so the vault is really 40
+  // pairs. Finishing one pays shards of its own rarity, which makes the pairs a
+  // steady drip towards a forge rather than a separate currency.
+  const PAIR_SHARD_BONUS = 3;
 
   const POWER_BY_RARITY = {
     common: 1,
@@ -529,6 +533,7 @@
     vaultSky: document.getElementById("vaultSky"),
     skyCanvas: document.getElementById("skyCanvas"),
     skyCaption: document.getElementById("skyCaption"),
+    vaultPairs: document.getElementById("vaultPairs"),
     viewGrid: document.getElementById("viewGrid"),
     viewSky: document.getElementById("viewSky"),
     vaultGrid: document.getElementById("vaultGrid"),
@@ -612,6 +617,17 @@
   const vaultFilters = new Map();
   const shardChips = new Map();
 
+  // The 40 pairs, worked out once from the catalogue: { branchId, rarityId, ids }.
+  const PAIRS = [];
+  for (const branch of BRANCHES) {
+    for (const rarity of RARITIES) {
+      const ids = CATALOG.filter(
+        (item) => item.branchId === branch.id && item.rarityId === rarity.id
+      ).map((item) => item.id);
+      if (ids.length > 1) PAIRS.push({ branchId: branch.id, rarityId: rarity.id, ids });
+    }
+  }
+
   let tokens = loadNumber(STORAGE.tokens, 0);
   let collection = loadCollection();
   const itemById = new Map(CATALOG.map((item) => [item.id, item]));
@@ -678,7 +694,9 @@
     stars: [],
     groups: [],
     hover: null,
-    caption: ""
+    caption: "",
+    // { branchId, start } while a freshly completed constellation throws a ring.
+    burst: null
   };
 
   buildRarityLadder();
@@ -709,6 +727,7 @@
     open: openWheel,
     close: closeWheel,
     awardToken: (amount = 1, source = "jackpot") => awardToken(amount, source),
+    shareRun: (data) => shareRun(data),
     getTokens: () => tokens,
     getCollection: () => ({ ...collection }),
     getVaultSummary,
@@ -827,6 +846,56 @@
     }
   }
 
+  function isPairComplete(branchId, rarityId) {
+    const pair = PAIRS.find((entry) => entry.branchId === branchId && entry.rarityId === rarityId);
+    return Boolean(pair) && pair.ids.every((id) => (collection[id] || 0) > 0);
+  }
+
+  function countPairs() {
+    let done = 0;
+    for (const pair of PAIRS) {
+      if (pair.ids.every((id) => (collection[id] || 0) > 0)) done += 1;
+    }
+    return done;
+  }
+
+  // Called *after* an item is granted, with the pair state captured before it:
+  // a pair pays once, on the pull that completes it, and never again on reload.
+  function celebratePair(branchId, rarityId, delay = 0) {
+    const rarity = rarityById.get(rarityId);
+    const branch = branchById.get(branchId);
+    if (!rarity || !branch) return;
+
+    wheel.shards[rarityId] = (wheel.shards[rarityId] || 0) + PAIR_SHARD_BONUS;
+    saveShards();
+    updateShardStrip();
+
+    const announce = () => {
+      showToast(
+        `PAIR COMPLETE · ${branch.short} ${rarity.short} · +${PAIR_SHARD_BONUS} ◆`,
+        "gold"
+      );
+      dispatchSfx("pair");
+      pulseHaptic([0, 16, 22, 34]);
+    };
+
+    if (delay > 0) window.setTimeout(announce, delay);
+    else announce();
+  }
+
+  // The tenth item in a branch is the constellation closing. The relic is the
+  // reward, but the moment belongs to the sky, so it also fires a ring there.
+  function celebrateBranch(branchId) {
+    const relic = RELICS.find((entry) => entry.branchId === branchId);
+    showToast(
+      `RELIC UNLOCKED · ${(relic ? relic.name : "CONSTELLATION COMPLETE").toUpperCase()}`,
+      "gold"
+    );
+    pulseHaptic([0, 35, 45, 80]);
+    dispatchSfx("constellation");
+    sky.burst = { branchId, start: performance.now() };
+  }
+
   function canForge(item) {
     return (
       (collection[item.id] || 0) === 0 &&
@@ -843,6 +912,9 @@
 
     const rarity = rarityById.get(item.rarityId);
     const branch = branchById.get(item.branchId);
+
+    const branchFoundBefore = getBranchFound(item.branchId);
+    const pairWasComplete = isPairComplete(item.branchId, item.rarityId);
 
     wheel.shards[rarity.id] = Math.max(0, (wheel.shards[rarity.id] || 0) - FORGE_COST);
     saveShards();
@@ -893,6 +965,25 @@
     showToast(
       `FORGED · ${item.name.toUpperCase()}`,
       rarity.rank >= 3 ? "gold" : ""
+    );
+
+    const branchDone = branchFoundBefore === 9;
+    if (!pairWasComplete && isPairComplete(item.branchId, item.rarityId)) {
+      celebratePair(item.branchId, item.rarityId, branchDone ? 1700 : 0);
+    }
+    if (branchDone) celebrateBranch(item.branchId);
+
+    window.dispatchEvent(
+      new CustomEvent("nova:item", {
+        detail: {
+          id: item.id,
+          name: item.name,
+          branchId: item.branchId,
+          rarityId: item.rarityId,
+          isNew: true,
+          forged: true
+        }
+      })
     );
 
     const found = countFoundItems();
@@ -1273,6 +1364,26 @@
       ctx.fillStyle = `rgba(${rgb}, ${strength * 0.75})`;
       ctx.fillText(`${group.found}/${stars.length}`, lx, ly + labelSize + 2.5);
       ctx.restore();
+    }
+
+    // A constellation that just closed sends one ring out from its centre.
+    if (sky.burst) {
+      const age = now - sky.burst.start;
+      if (age > 1600) {
+        sky.burst = null;
+      } else {
+        const group = sky.groups.find((entry) => entry.branch.id === sky.burst.branchId);
+        if (group) {
+          const k = age / 1600;
+          ctx.save();
+          ctx.strokeStyle = `rgba(${group.branch.rgb}, ${0.6 * (1 - k)})`;
+          ctx.lineWidth = 2.4 * (1 - k) + 0.4;
+          ctx.beginPath();
+          ctx.arc(group.ox, group.oy, group.scale * 0.6 + k * 120, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
     }
 
     drawSkyCenter(ctx, cx, cy, t, radius);
@@ -2337,36 +2448,257 @@
     return canvas;
   }
 
-  function downloadPassport() {
-    const canvas = drawPassportCanvas();
+  // One download path for every card the game exports.
+  function downloadCanvas(canvas, filename, message) {
     if (!canvas) {
-      showToast("COULD NOT RENDER PASSPORT", "");
+      showToast("COULD NOT RENDER CARD", "");
       return;
     }
 
-    const download = (url) => {
+    const save = (url) => {
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "nova-vault-passport.png";
+      anchor.download = filename;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      showToast("PASSPORT PNG DOWNLOADED", "gold");
+      showToast(message, "gold");
     };
 
     if (typeof canvas.toBlob === "function") {
       canvas.toBlob((blob) => {
         if (!blob) {
-          download(canvas.toDataURL("image/png"));
+          save(canvas.toDataURL("image/png"));
           return;
         }
         const url = URL.createObjectURL(blob);
-        download(url);
+        save(url);
         window.setTimeout(() => URL.revokeObjectURL(url), 2000);
       }, "image/png");
     } else {
-      download(canvas.toDataURL("image/png"));
+      save(canvas.toDataURL("image/png"));
     }
+  }
+
+  function downloadPassport() {
+    downloadCanvas(drawPassportCanvas(), "nova-vault-passport.png", "PASSPORT PNG DOWNLOADED");
+  }
+
+  // ---- Run card ------------------------------------------------------------
+  // A portrait card of one run: the score, what the cabinet paid out, and what
+  // the wheel gave back. Every number is the run's own, so two friends holding
+  // cards are comparing the same figures the board used.
+  function drawRunCard(data) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1350;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const gold = "#ffc75f";
+    const loot = (data.loot || []).slice(0, 5);
+
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, "#0a0e20");
+    bg.addColorStop(0.55, "#050812");
+    bg.addColorStop(1, "#090713");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    const goldGlow = ctx.createRadialGradient(900, 140, 10, 900, 140, 560);
+    goldGlow.addColorStop(0, "rgba(255, 192, 79, 0.18)");
+    goldGlow.addColorStop(1, "rgba(255, 192, 79, 0)");
+    ctx.fillStyle = goldGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    const violetGlow = ctx.createRadialGradient(140, 1180, 10, 140, 1180, 480);
+    violetGlow.addColorStop(0, "rgba(113, 76, 255, 0.16)");
+    violetGlow.addColorStop(1, "rgba(113, 76, 255, 0)");
+    ctx.fillStyle = violetGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Star dust, seeded so the card is the same picture every time it renders.
+    let seed = 0x2f9a1c7;
+    for (let i = 0; i < 140; i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const x = (seed / 4294967296) * W;
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const y = (seed / 4294967296) * H;
+      ctx.fillStyle = `rgba(214, 226, 255, ${0.04 + (i % 6) * 0.018})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.028)";
+    ctx.lineWidth = 1;
+    for (let x = 36; x < W; x += 36) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+    for (let y = 36; y < H; y += 36) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = "rgba(255, 226, 173, 0.24)";
+    ctx.lineWidth = 2;
+    roundCanvasRect(ctx, 34, 34, W - 68, H - 68, 36);
+    ctx.stroke();
+
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#8d91ac";
+    ctx.font = '700 17px Bahnschrift, "Trebuchet MS", sans-serif';
+    drawSpacedText(ctx, "NOVA ARCADE · CABINET 001", 86, 93, 3.2, true);
+
+    ctx.fillStyle = "#ffefd1";
+    ctx.font = '400 78px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif';
+    ctx.fillText("RUN CARD", 82, 163);
+
+    ctx.fillStyle = "rgba(255, 207, 119, 0.7)";
+    ctx.font = '700 15px Bahnschrift, "Trebuchet MS", sans-serif';
+    drawSpacedText(ctx, String(data.date || "").toUpperCase(), 86, 214, 3.6, true);
+
+    ctx.textAlign = "right";
+    ctx.fillStyle = gold;
+    ctx.font = '700 26px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillText(`${data.found} / ${data.total} VAULT`, W - 86, 148);
+    ctx.fillStyle = "#8d91ac";
+    ctx.font = '700 15px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillText(`${data.pairs} / ${data.pairsTotal} PAIRS`, W - 86, 186);
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.beginPath();
+    ctx.moveTo(86, 250);
+    ctx.lineTo(W - 86, 250);
+    ctx.stroke();
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#907d9a";
+    ctx.font = '700 14px Bahnschrift, "Trebuchet MS", sans-serif';
+    drawSpacedText(ctx, "FINAL SCORE", 86, 300, 3, true);
+
+    ctx.fillStyle = gold;
+    ctx.font = '400 112px "Cascadia Mono", "Lucida Console", monospace';
+    ctx.fillText(Number(data.score || 0).toLocaleString("en-US"), 82, 396);
+
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#807d9a";
+    ctx.font = '700 13px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillText("PERSONAL BEST", W - 88, 356);
+    ctx.fillStyle = "#d8d2e8";
+    ctx.font = '400 40px "Cascadia Mono", "Lucida Console", monospace';
+    ctx.fillText(Number(data.best || 0).toLocaleString("en-US"), W - 88, 398);
+
+    const stats = [
+      ["JACKPOTS", String(data.jackpots || 0)],
+      ["NOVA TOKENS", String(data.tokens || 0)],
+      ["BEST CHAIN", data.chain ? `×${data.chain}` : "×1"],
+      ["VAULT PULLS", String((data.loot || []).length)]
+    ];
+    const statW = (W - 172 - 3 * 16) / 4;
+    stats.forEach(([label, value], index) => {
+      const x = 86 + index * (statW + 16);
+      ctx.fillStyle = "rgba(5, 8, 18, 0.45)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 1;
+      roundCanvasRect(ctx, x, 470, statW, 96, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#747b9a";
+      ctx.font = '700 10px Bahnschrift, "Trebuchet MS", sans-serif';
+      drawSpacedText(ctx, label, x + statW / 2, 500, 1.6);
+      ctx.fillStyle = "#fff0d2";
+      ctx.font = '400 40px "Cascadia Mono", "Lucida Console", monospace';
+      ctx.fillText(value, x + statW / 2, 540);
+    });
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#907d9a";
+    ctx.font = '700 14px Bahnschrift, "Trebuchet MS", sans-serif';
+    drawSpacedText(ctx, "WHEEL GAVE BACK", 86, 640, 3, true);
+
+    if (!loot.length) {
+      ctx.fillStyle = "#6f7590";
+      ctx.font = '700 16px Bahnschrift, "Trebuchet MS", sans-serif';
+      drawSpacedText(ctx, "NO PULLS THIS RUN · THE BOARD PAID IN POINTS", 86, 712, 1.6, true);
+    } else {
+      loot.forEach((entry, index) => {
+        const y = 676 + index * 66;
+        const rarity = rarityById.get(entry.rarityId);
+        const branch = branchById.get(entry.branchId);
+        const rgb = rarity ? rarity.rgb : "146, 153, 183";
+
+        ctx.fillStyle = "rgba(5, 8, 18, 0.5)";
+        ctx.strokeStyle = `rgba(${rgb}, 0.28)`;
+        ctx.lineWidth = 1;
+        roundCanvasRect(ctx, 86, y, W - 172, 58, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = `rgb(${rgb})`;
+        roundCanvasRect(ctx, 86, y, 5, 58, 2.5);
+        ctx.fill();
+
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#f4efdf";
+        ctx.font = '700 22px Bahnschrift, "Trebuchet MS", sans-serif';
+        ctx.fillText(entry.name, 112, y + 30);
+
+        ctx.textAlign = "right";
+        ctx.fillStyle = `rgba(${rgb}, 0.9)`;
+        ctx.font = '700 13px Bahnschrift, "Trebuchet MS", sans-serif';
+        ctx.fillText(
+          `${rarity ? rarity.short : ""} · ${branch ? branch.short : ""}${entry.forged ? " · FORGED" : entry.isNew ? " · NEW" : ""}`,
+          W - 108,
+          y + 30
+        );
+      });
+    }
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.beginPath();
+    ctx.moveTo(86, 1150);
+    ctx.lineTo(W - 86, 1150);
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#8d91ac";
+    ctx.font = '700 13px Bahnschrift, "Trebuchet MS", sans-serif';
+    drawSpacedText(ctx, "NOVA PACHINKO · EVERY JACKPOT MINTS A TOKEN · NO PURCHASE", W / 2, 1206, 2.2);
+
+    ctx.fillStyle = "rgba(255, 199, 95, 0.7)";
+    ctx.font = '400 22px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.fillText("✦", W / 2, 1256);
+
+    return canvas;
+  }
+
+  function shareRun(data) {
+    const summary = getVaultSummary();
+    const payload = {
+      date: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      }),
+      found: summary.found,
+      total: summary.total,
+      pairs: summary.pairs,
+      pairsTotal: summary.pairsTotal,
+      ...(data || {})
+    };
+    downloadCanvas(
+      drawRunCard(payload),
+      `nova-run-${payload.score || 0}.png`,
+      "RUN CARD DOWNLOADED"
+    );
   }
 
   function bindEvents() {
@@ -2797,6 +3129,7 @@
     }
 
     updateShardStrip();
+    if (el.vaultPairs) el.vaultPairs.textContent = String(countPairs());
     if (sky.ctx) layoutSky();
 
     if (!wheel.lastResult && !wheel.busy) {
@@ -2846,6 +3179,8 @@
     return {
       found,
       total: TOTAL_ITEMS,
+      pairs: countPairs(),
+      pairsTotal: PAIRS.length,
       tokens,
       dust: wheel.dust,
       nextBranch
@@ -3162,6 +3497,7 @@
 
     const { branch, rarity, item } = pending;
     const branchFoundBefore = getBranchFound(item.branchId);
+    const pairWasComplete = isPairComplete(item.branchId, item.rarityId);
     const existing = collection[item.id] || 0;
     const isNew = existing === 0;
     const count = existing + 1;
@@ -3270,18 +3606,35 @@
       }
     }
 
-    if (branchFoundBefore === 9) {
-      const unlockedRelic = RELICS.find((relic) => relic.branchId === item.branchId);
-      if (unlockedRelic) {
-        showToast(`RELIC UNLOCKED · ${unlockedRelic.name.toUpperCase()}`, "gold");
-        pulseHaptic([0, 35, 45, 80]);
-      }
+    // A pull can finish a pair and a constellation at the same time. The relic
+    // is the bigger news, so it takes the toast and the pair follows it a beat
+    // later instead of being overwritten.
+    const branchDone = branchFoundBefore === 9;
+    if (!pairWasComplete && isPairComplete(item.branchId, item.rarityId)) {
+      celebratePair(item.branchId, item.rarityId, branchDone ? 1700 : 0);
+    }
+
+    if (branchDone) {
+      celebrateBranch(item.branchId);
     } else if (rarity.rank >= 3) {
       showToast(
         `${rarity.name.toUpperCase()} · ${item.name}`,
         rarity.rank >= 4 ? "mythic" : "gold"
       );
     }
+
+    window.dispatchEvent(
+      new CustomEvent("nova:item", {
+        detail: {
+          id: item.id,
+          name: item.name,
+          branchId: item.branchId,
+          rarityId: item.rarityId,
+          isNew,
+          forged: false
+        }
+      })
+    );
 
     window.setTimeout(() => {
       if (wheel.open && !wheel.busy && tokens > 0) {

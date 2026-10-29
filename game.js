@@ -43,6 +43,7 @@
     runJackpots: document.getElementById("runJackpots"),
     runTokens: document.getElementById("runTokens"),
     runChain: document.getElementById("runChain"),
+    shareRunBtn: document.getElementById("shareRunBtn"),
     reportVault: document.getElementById("reportVault"),
     reportVaultFill: document.getElementById("reportVaultFill"),
     reportNext: document.getElementById("reportNext"),
@@ -95,6 +96,10 @@
   // Three plunges is enough to double a pot twice at best. Any more and a good
   // run turns into a payout machine instead of a moment.
   const PLUNGE_BALLS = 3;
+
+  // The wheel owns the real rarity list; the board only needs the ordering, to
+  // put the best thing a run pulled at the top of its card.
+  const RARITY_RANK = { common: 0, rare: 1, epic: 2, legendary: 3, mythic: 4 };
   const DEFAULT_BONUSES = {
     startingBalls: 0,
     chainStep: 5,
@@ -197,6 +202,8 @@
     // any moment, so the pot is never at risk; a plunge only ever decides how
     // much bigger it gets.
     pot: 0,
+    // Everything the wheel handed over during this run, for the run card.
+    runLoot: [],
     overflow: { active: false, resolved: false, hit: false, plunges: PLUNGE_BALLS },
     heat: 0,
     hot: false,
@@ -446,6 +453,25 @@
       if (window.NovaWheel) window.NovaWheel.open();
     });
 
+    if (ui.shareRunBtn) {
+      ui.shareRunBtn.addEventListener("click", () => {
+        if (!window.NovaWheel || typeof window.NovaWheel.shareRun !== "function") return;
+        const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+        window.NovaWheel.shareRun({
+          score: state.score,
+          best: state.best,
+          jackpots: state.runStats.jackpots,
+          tokens: state.runStats.tokensEarned,
+          chain: Math.min(5, 1 + Math.floor(state.runStats.bestChain / chainStep)),
+          // Rarest first: a card with a mythic on it should lead with it.
+          loot: [...state.runLoot].sort(
+            (a, b) => (RARITY_RANK[b.rarityId] || 0) - (RARITY_RANK[a.rarityId] || 0)
+          )
+        });
+        ui.shareRunBtn.blur();
+      });
+    }
+
     if (ui.bankBtn) {
       ui.bankBtn.addEventListener("click", () => {
         const amount = bankPot("banked");
@@ -495,6 +521,15 @@
 
     window.addEventListener("nova:sfx", (event) => {
       handleNovaSfx(event.detail);
+    });
+
+    // The wheel announces every prize it grants, so the run can carry its own
+    // loot into the share card without either module reaching into the other.
+    window.addEventListener("nova:item", (event) => {
+      const detail = event.detail;
+      if (!detail || !detail.id) return;
+      state.runLoot.push(detail);
+      if (state.runLoot.length > 12) state.runLoot.shift();
     });
 
     window.addEventListener("nova:collectionchange", (event) => {
@@ -1382,6 +1417,7 @@
     }
     if (ui.againBtn) ui.againBtn.hidden = true;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = true;
+    if (ui.shareRunBtn) ui.shareRunBtn.hidden = true;
     if (ui.newBest) ui.newBest.classList.remove("show");
 
     ui.gameOver.classList.add("show");
@@ -1676,6 +1712,7 @@
     if (ui.bankOverlayBtn) ui.bankOverlayBtn.hidden = true;
     if (ui.againBtn) ui.againBtn.hidden = false;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = false;
+    if (ui.shareRunBtn) ui.shareRunBtn.hidden = false;
 
     ui.finalTitle.textContent = isNewBest
       ? "NEW HIGH SCORE"
@@ -1779,6 +1816,7 @@
     state.status = "ready";
     state.started = false;
     state.runStats = { jackpots: 0, tokensEarned: 0, bestChain: 0 };
+    state.runLoot = [];
     state.score = 0;
     state.runBestStart = state.best;
     syncBonusesFromWheel();
@@ -1821,6 +1859,7 @@
     if (ui.bankOverlayBtn) ui.bankOverlayBtn.hidden = true;
     if (ui.againBtn) ui.againBtn.hidden = false;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = false;
+    if (ui.shareRunBtn) ui.shareRunBtn.hidden = false;
     ui.newBest.classList.remove("show");
     ui.score.classList.remove("bump");
     ui.balls.parentElement.classList.remove("bump");
@@ -4037,6 +4076,18 @@
           tone(hz, 0.16, "triangle", 0.016, hz, 0, 0.16 + index * 0.075, 0.18);
         });
         spinTickCount = 0;
+        break;
+      case "pair":
+        // Two stars finding each other: a small tick, then a soft fifth above.
+        tone(440, 0.1, "sine", 0.02, 494, 0, 0, 0.12);
+        tone(659, 0.34, "sine", 0.016, 660, 0, 0.06, 0.26);
+        break;
+      case "constellation":
+        // A whole figure closing: a held open fifth with a ripple above it.
+        tone(261, 0.9, "sine", 0.032, 262, 0, 0, 0.24);
+        tone(392, 1.0, "sine", 0.024, 394, 0, 0.04, 0.28);
+        tone(784, 0.7, "triangle", 0.012, 790, 0, 0.1, 0.36);
+        tone(1046, 0.5, "sine", 0.008, 1048, 0, 0.18, 0.32);
         break;
       case "forge":
         // A piece being set into its socket: a struck tick, then the shelf
