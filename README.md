@@ -66,7 +66,7 @@ The same rates are available in the wheel under **FULL ODDS**.
 
 - **Mastery:** an item gains mastery at 1, 2, 3, 5, and 8 copies. Each level adds to Vault Power.
 - **Dust:** duplicate rewards grant Dust based on rarity: 4 / 10 / 25 / 60 / 150 for Common through Mythic.
-- **Showcase:** click discovered Vault cards to choose up to three favorites for the passport.
+- **Showcase:** click discovered Vault cards to choose up to three favorites for the passport. A showcased card is marked where you can see it — gold edge, gold wash, and a `★ 1/2/3` chip telling you which passport slot it sits in — and the `★ SHOWCASE` filter at the head of the branch row shows just those three, so you never have to hunt an eighty-card wall for the thing you pinned last week. The passport's slots work in both directions: click a filled one to take that piece off, click an empty one to jump to the Vault.
 - **Titles:** collection progress unlocks titles from Rookie Curator to Vault Sovereign.
 
 ## Relic loadout

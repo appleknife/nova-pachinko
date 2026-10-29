@@ -493,6 +493,7 @@
     passportBest: document.getElementById("passportBest"),
     passportShowcaseCount: document.getElementById("passportShowcaseCount"),
     passportShowcase: document.getElementById("passportShowcase"),
+    vaultEmpty: document.getElementById("vaultEmpty"),
     passportRelics: document.getElementById("passportRelics"),
     passportBranches: document.getElementById("passportBranches"),
     passportCodeHint: document.getElementById("passportCodeHint"),
@@ -647,6 +648,7 @@
   updateWalletUi();
   updatePityUi();
   updateCollectionUi();
+  applyVaultFilter();
   setTab("wheel", true);
   notifyLoadoutChange();
 
@@ -727,7 +729,11 @@
         mastery.appendChild(document.createElement("i"));
       }
 
-      bottom.append(branchLabel, count);
+      const showcaseBadge = document.createElement("span");
+      showcaseBadge.className = "vc-showcase";
+      showcaseBadge.hidden = true;
+
+      bottom.append(branchLabel, showcaseBadge, count);
       card.append(top, name, bottom, mastery);
       el.vaultGrid.appendChild(card);
       vaultCards.set(item.id, card);
@@ -735,6 +741,15 @@
   }
 
   function buildVaultFilters() {
+    // First, because the question "which one did I pin again?" is worth one
+    // click, not eighty cards of scrolling.
+    const showcase = makeFilterButton("showcase", "\u2605 SHOWCASE", "255, 199, 95");
+    showcase.classList.add("showcase-filter");
+    showcase.title = "Only the three pieces on your passport";
+    showcase.setAttribute("aria-pressed", "false");
+    el.vaultFilters.appendChild(showcase);
+    vaultFilters.set("showcase", showcase);
+
     const all = makeFilterButton("all", "ALL", "255, 199, 95");
     all.classList.add("active");
     all.setAttribute("aria-pressed", "true");
@@ -1057,8 +1072,21 @@
     if (el.showcaseCount) el.showcaseCount.textContent = `${wheel.showcase.length}/3`;
     for (const item of CATALOG) {
       const card = vaultCards.get(item.id);
-      if (card) card.classList.toggle("showcased", wheel.showcase.includes(item.id));
+      if (!card) continue;
+      const index = wheel.showcase.indexOf(item.id);
+      card.classList.toggle("showcased", index >= 0);
+      // The slot number is the whole point: with eighty cards on the wall, a
+      // gold border alone still leaves you hunting for which of your three
+      // pieces this one is. "★ 2" answers it without opening the passport.
+      const badge = card.querySelector(".vc-showcase");
+      if (badge) {
+        badge.hidden = index < 0;
+        badge.textContent = index >= 0 ? `\u2605 ${index + 1}` : "";
+      }
     }
+    // Also refreshes the SHOWCASE pill's count and, when that filter is open,
+    // drops a piece the moment it is un-pinned.
+    applyVaultFilter();
     updatePassportUi();
   }
 
@@ -1073,7 +1101,7 @@
     if (index >= 0) {
       wheel.showcase.splice(index, 1);
     } else if (wheel.showcase.length >= 3) {
-      showToast("SHOWCASE FULL · REMOVE ONE FIRST", "");
+      showToast("SHOWCASE FULL · CLICK \u2605 SHOWCASE TO SWAP", "");
       return;
     } else {
       wheel.showcase.push(itemId);
@@ -1081,7 +1109,10 @@
 
     saveStringArray(STORAGE.showcase, wheel.showcase);
     updateShowcaseUi();
-    showToast(index >= 0 ? "REMOVED FROM SHOWCASE" : "ADDED TO SHOWCASE", "");
+    showToast(
+      `${index >= 0 ? "REMOVED" : "SHOWCASED"} \u00b7 ${item.name.toUpperCase()}`,
+      index >= 0 ? "" : "gold"
+    );
   }
 
   function updatePassportUi() {
@@ -1105,15 +1136,26 @@
     el.passportCodeHint.textContent = `NOVA1 · ${profile.dust} DUST`;
 
     el.passportShowcase.innerHTML = "";
+    // Each slot is a button: a filled one takes its piece off the passport,
+    // an empty one walks you to the Vault. The showcase used to be writable
+    // from exactly one place, which is a bad place to be stuck once you have
+    // forgotten what you pinned.
     for (let i = 0; i < 3; i++) {
       const item = profile.showcaseItems[i];
-      const slot = document.createElement("div");
+      const slot = document.createElement("button");
+      slot.type = "button";
       slot.className = "passport-showcase-slot";
       if (item) {
         const rarity = rarityById.get(item.rarityId);
         const branch = branchById.get(item.branchId);
         slot.style.setProperty("--r-rgb", rarity.rgb);
         slot.style.setProperty("--b-rgb", branch.rgb);
+        slot.dataset.item = item.id;
+        slot.setAttribute(
+          "aria-label",
+          `Remove ${item.name} from your showcase`
+        );
+        slot.title = "Remove from showcase";
         const symbol = document.createElement("span");
         symbol.className = "ps-symbol";
         symbol.textContent = branch.symbol;
@@ -1121,12 +1163,26 @@
         copy.className = "ps-copy";
         const name = document.createElement("strong");
         name.textContent = item.name;
+        // Rarity and copies live in separate spans so a three-across phone
+        // slot can drop the copy count instead of wrapping "LEGENDARY" in half.
+        const meta = document.createElement("span");
+        meta.className = "ps-meta";
         const rarityLabel = document.createElement("span");
-        rarityLabel.textContent = `${rarity.name.toUpperCase()} · ×${collection[item.id] || 0}`;
-        copy.append(name, rarityLabel);
-        slot.append(symbol, copy);
+        rarityLabel.textContent = rarity.name.toUpperCase();
+        const copies = document.createElement("span");
+        copies.className = "ps-copies";
+        copies.textContent = `×${collection[item.id] || 0}`;
+        meta.append(rarityLabel, copies);
+        copy.append(name, meta);
+        const remove = document.createElement("span");
+        remove.className = "ps-remove";
+        remove.setAttribute("aria-hidden", "true");
+        remove.textContent = "✕";
+        slot.append(symbol, copy, remove);
       } else {
         slot.classList.add("empty");
+        slot.setAttribute("aria-label", "Choose a showcase piece in the Vault");
+        slot.title = "Choose in Vault";
         const symbol = document.createElement("span");
         symbol.className = "ps-symbol";
         symbol.textContent = "+";
@@ -1666,6 +1722,25 @@
       toggleRelic(card.dataset.relic);
     });
 
+    el.passportShowcase.addEventListener("click", (event) => {
+      const slot = event.target.closest(".passport-showcase-slot");
+      if (!slot) return;
+      const itemId = slot.dataset.item;
+      if (itemId) {
+        // The rebuild below replaces the button we just clicked, so put focus
+        // back on the same slot instead of dropping it on the body.
+        const index = Array.prototype.indexOf.call(el.passportShowcase.children, slot);
+        toggleShowcase(itemId);
+        const next = el.passportShowcase.children[index];
+        if (next) next.focus({ preventScroll: true });
+        return;
+      }
+      // Empty slot: the label already says "choose in vault", so do that -
+      // unfiltered, since the point is to pick something new.
+      setTab("vault");
+      setVaultFilter("all");
+    });
+
     el.sharePngBtn.addEventListener("click", downloadPassport);
     el.copyCodeBtn.addEventListener("click", copyCollectionCode);
     el.copyCodeBtn2.addEventListener("click", copyCollectionCode);
@@ -2008,20 +2083,41 @@
   function setVaultFilter(branchId) {
     if (wheel.busy) return;
     wheel.filter = branchId;
+    applyVaultFilter();
+    el.vaultGrid.scrollTop = 0;
+  }
+
+  // Split out of setVaultFilter so the showcase state can re-run it without
+  // yanking the grid back to the top while you are looking at it.
+  function applyVaultFilter() {
+    const filter = wheel.filter;
 
     for (const [id, button] of vaultFilters) {
-      const active = id === branchId;
+      const active = id === filter;
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
+      if (id === "showcase") {
+        button.textContent = `\u2605 SHOWCASE ${wheel.showcase.length}/3`;
+      }
     }
 
+    let visible = 0;
     for (const item of CATALOG) {
       const card = vaultCards.get(item.id);
       if (!card) continue;
-      card.hidden = branchId !== "all" && item.branchId !== branchId;
+      const shown = filter === "showcase"
+        ? wheel.showcase.includes(item.id)
+        : (filter === "all" || item.branchId === filter);
+      card.hidden = !shown;
+      if (shown) visible += 1;
     }
 
-    el.vaultGrid.scrollTop = 0;
+    if (el.vaultEmpty) {
+      el.vaultEmpty.hidden = visible > 0;
+      el.vaultEmpty.textContent = filter === "showcase"
+        ? "Nothing on your passport yet. Click a discovered item to pin it here, then it shows up for your friends."
+        : "Nothing discovered in this branch yet.";
+    }
   }
 
   function spinWheel() {
