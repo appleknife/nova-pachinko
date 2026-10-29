@@ -26,6 +26,12 @@
   box-sizing: border-box;
 }
 
+/* `hidden` has to beat the layout rules below (.again-btn and friends set
+   their own display), so the toggle is declared once, loudly. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -622,6 +628,106 @@ h1 {
   50% { box-shadow: inset 0 0 0 1px rgba(255, 220, 155, 0.15), 0 0 24px rgba(255, 192, 82, 0.14); }
 }
 
+.token-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-row .token-card {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The pot is the run's unbanked jackpot take. It only exists while there is
+   something in it, so it costs no layout when the board is cold. */
+.pot-strip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 7px 6px 9px;
+  border: 1px solid rgba(255, 206, 120, 0.34);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255, 214, 140, 0.22), transparent 62%),
+    linear-gradient(160deg, rgba(58, 40, 16, 0.92), rgba(20, 15, 26, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 214, 0.14),
+    0 10px 22px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(255, 190, 90, 0.12);
+}
+
+.pot-strip.pot-pop {
+  animation: pot-pop 520ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+@keyframes pot-pop {
+  0% { transform: scale(1); }
+  32% { transform: scale(1.055); border-color: rgba(255, 224, 160, 0.72); }
+  100% { transform: scale(1); }
+}
+
+.pot-badge {
+  color: var(--gold);
+  font-size: 13px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 197, 95, 0.55);
+}
+
+.pot-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pot-copy small {
+  color: #c6a878;
+  font-size: 6.5px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.pot-copy strong {
+  color: #ffe6b8;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pot-bank {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 214, 140, 0.42);
+  border-radius: 10px;
+  color: #1d1305;
+  background: linear-gradient(180deg, #ffd98d, #e9a63f);
+  font-family: var(--ui);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+.pot-bank:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 0 18px rgba(255, 200, 110, 0.3);
+}
+
+.pot-bank:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.pot-bank:focus-visible {
+  outline: 2px solid rgba(255, 226, 170, 0.8);
+  outline-offset: 2px;
+}
+
 .token-card {
   position: relative;
   width: 100%;
@@ -1121,6 +1227,66 @@ h1 {
   text-shadow: 0 0 28px rgba(255, 197, 94, 0.25);
 }
 
+.overflow-note {
+  margin: 4px 0 10px;
+  color: #b9bdd6;
+  font-size: 9px;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+
+.overflow-note b {
+  color: #ffe0a6;
+  font-weight: 800;
+}
+
+.overflow-unit {
+  display: block;
+  margin-top: 2px;
+  color: #c8a878;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+}
+
+.overflow-meta {
+  margin: 0 0 12px;
+  color: var(--gold);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+
+.overlay[data-mode="overflow"] {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 186, 92, 0.2), transparent 52%),
+    rgba(5, 7, 16, 0.82);
+}
+
+.overlay[data-mode="overflow"] .overlay-kicker {
+  color: var(--gold);
+}
+
+/* The overflow card is a decision, not a receipt: the report belongs to the
+   run, and the run is not over yet. */
+.overlay[data-mode="overflow"] .final-meta,
+.overlay[data-mode="overflow"] .run-report {
+  display: none;
+}
+
+.plunge-btn {
+  color: #21160a !important;
+  border-color: rgba(255, 232, 186, 0.55) !important;
+  background: linear-gradient(180deg, #ffe0a0, #f0ab45) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 10px 26px rgba(255, 168, 60, 0.24) !important;
+}
+
+.plunge-btn:hover {
+  filter: brightness(1.05);
+}
+
 .final-meta {
   margin: 10px 0 13px;
   display: flex;
@@ -1467,11 +1633,43 @@ h1 {
     margin: 5px 0;
   }
 
-  .token-card {
+  /* The token card now shares its row with the pot, so the grid area belongs
+     to the row instead of the card. */
+  .token-row {
     grid-area: tokens;
+    gap: 7px;
+  }
+
+  .token-card {
     min-height: 40px;
     padding: 5px 10px;
     border-radius: 12px;
+  }
+
+  .pot-strip {
+    gap: 5px;
+    padding: 5px 6px 5px 7px;
+    border-radius: 12px;
+  }
+
+  .pot-badge {
+    font-size: 11px;
+  }
+
+  .pot-copy small {
+    font-size: 6px;
+    letter-spacing: 0.14em;
+  }
+
+  .pot-copy strong {
+    font-size: 13px;
+  }
+
+  .pot-bank {
+    min-height: 32px;
+    padding: 0 9px;
+    font-size: 7px;
+    border-radius: 9px;
   }
 
   .token-glyph {

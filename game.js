@@ -49,7 +49,17 @@
     announcer: document.getElementById("announcer"),
     gameToast: document.getElementById("gameToast"),
     qualityBtn: document.getElementById("qualityBtn"),
-    qualityLabel: document.getElementById("qualityLabel")
+    qualityLabel: document.getElementById("qualityLabel"),
+    overlayKicker: document.getElementById("overlayKicker"),
+    potStrip: document.getElementById("potStrip"),
+    potCount: document.getElementById("potCount"),
+    bankBtn: document.getElementById("bankBtn"),
+    plungeBtn: document.getElementById("plungeBtn"),
+    bankOverlayBtn: document.getElementById("bankOverlayBtn"),
+    overflowNote: document.getElementById("overflowNote"),
+    overflowMeta: document.getElementById("overflowMeta"),
+    plungeCount: document.getElementById("plungeCount"),
+    overflowUnit: document.getElementById("overflowUnit")
   };
 
   const W = 760;
@@ -72,6 +82,19 @@
   const AUTO_DROP_KEY = "nova-pachinko-auto-v1";
   const AUTO_DROP_MS = 190;
   const AUTO_SWEEP_SECONDS = 2.3;
+
+  // Board heat. A lucky bumper is worth 11 heat and a plain pin about half a
+  // point, so a run that keeps finding the gold studs heats up every couple of
+  // balls while a slow one never gets there. Heat bleeds off on its own, which
+  // is what makes the full bar feel like something the player did.
+  const HEAT_MAX = 100;
+  const HEAT_PER_BUMPER = 11;
+  const HEAT_PER_PIN = 0.45;
+  const HEAT_DECAY = 3.6;
+  const HOT_SECONDS = 9;
+  // Three plunges is enough to double a pot twice at best. Any more and a good
+  // run turns into a payout machine instead of a moment.
+  const PLUNGE_BALLS = 3;
   const DEFAULT_BONUSES = {
     startingBalls: 0,
     chainStep: 5,
@@ -169,7 +192,15 @@
     auto: loadBoolean(AUTO_DROP_KEY, false),
     autoTimer: 0,
     autoPhase: 0,
-    muted: loadBoolean("nova-pachinko-muted-v1", false)
+    muted: loadBoolean("nova-pachinko-muted-v1", false),
+    // Jackpot tokens collect here instead of the wallet. Banking is allowed at
+    // any moment, so the pot is never at risk; a plunge only ever decides how
+    // much bigger it gets.
+    pot: 0,
+    overflow: { active: false, resolved: false, hit: false, plunges: PLUNGE_BALLS },
+    heat: 0,
+    hot: false,
+    hotTimer: 0
   };
   state.runBestStart = state.best;
 
@@ -355,6 +386,13 @@
       } else if (key === "q") {
         event.preventDefault();
         setQualityMode((qualityMode + 1) % 3);
+      } else if (key === "b") {
+        // B banks. It is the only key that can spend nothing and save something.
+        event.preventDefault();
+        if (state.pot > 0) {
+          const amount = bankPot("banked");
+          ui.announcer.textContent = `Banked ${amount} token${amount === 1 ? "" : "s"}.`;
+        }
       }
     });
 
@@ -407,6 +445,34 @@
     ui.overlayVaultBtn.addEventListener("click", () => {
       if (window.NovaWheel) window.NovaWheel.open();
     });
+
+    if (ui.bankBtn) {
+      ui.bankBtn.addEventListener("click", () => {
+        const amount = bankPot("banked");
+        if (amount > 0) {
+          ui.announcer.textContent = `Banked ${amount} token${amount === 1 ? "" : "s"}.`;
+        }
+        ui.bankBtn.blur();
+      });
+    }
+
+    if (ui.plungeBtn) {
+      ui.plungeBtn.addEventListener("click", () => {
+        plunge();
+        ui.plungeBtn.blur();
+      });
+    }
+
+    if (ui.bankOverlayBtn) {
+      ui.bankOverlayBtn.addEventListener("click", () => {
+        const amount = bankPot("banked");
+        if (amount > 0) {
+          ui.announcer.textContent = `Banked ${amount} token${amount === 1 ? "" : "s"}.`;
+        }
+        showRunReport();
+        ui.bankOverlayBtn.blur();
+      });
+    }
 
     ui.soundBtn.addEventListener("click", () => {
       toggleSound();
@@ -648,6 +714,7 @@
     if (steps === 14) accumulator = 0;
 
     updateEffects(dt * (slowMotion ? 0.55 : 1) * (1 - 0.45 * state.cinema));
+    updateHeat(dt);
     updateAutoAim(dt);
     if (slowMotion) state.slowMo = Math.max(0, state.slowMo - dt);
     updateHud(false);
@@ -895,7 +962,10 @@
       // added to the bounce, which is the difference between "that felt like a
       // nudge" and "that pin just fired my ball across the board".
       const speedIn = Math.hypot(ball.vx, ball.vy);
-      const launch = clamp(820 + impact * 0.85, 820, 1360);
+      // A hot board kicks harder, which pairs with the extra token: the payout
+      // rail is one bounce closer for the whole hot window.
+      const kick = state.hot ? 1.14 : 1;
+      const launch = clamp((820 + impact * 0.85) * kick, 820, 1560);
       const target = Math.max(launch, speedIn * 0.92);
 
       // Launch it down-field, never back up: a ball fired upward spends its
@@ -1041,6 +1111,9 @@
       if (pin.gold) {
         spawnSparks(pin.x, pin.y, C.gold, 5, 1.25);
         sfxGoldPin();
+        addHeat(HEAT_PER_BUMPER);
+      } else {
+        addHeat(HEAT_PER_PIN);
       }
     }
 
@@ -1082,6 +1155,14 @@
 
     ball.captured = true;
     ball.captureAge = 0;
+    // The plunge is resolved by the ball that was dropped for it, and by that
+    // ball only: a bonus ball that extends the run afterwards must not keep
+    // doubling a pot the player already collected.
+    const plunging = state.overflow.active;
+    if (plunging) {
+      state.overflow.active = false;
+      state.overflow.resolved = true;
+    }
     ball.vx *= 0.22;
     ball.vy = Math.max(ball.vy, 190);
     slot.flash = 1;
@@ -1142,16 +1223,38 @@
     // own landing, scaled by what the slot is worth.
     if (state.cinema > 0.2) sfxFinalLanding(slot);
 
+    let minted = 0;
     if (slot.jackpot) {
       state.flash = REDUCED_MOTION ? 0.12 : 0.34;
       state.flashColor = C.gold;
-      const tokensWon = 1 + bonuses.tokenBonus;
+      // A hot board is worth exactly one extra token per jackpot. That is the
+      // whole payoff, which keeps the mechanic one sentence long.
+      minted = 1 + bonuses.tokenBonus + (state.hot ? 1 : 0);
       state.runStats.jackpots += 1;
-      state.runStats.tokensEarned += tokensWon;
+      state.runStats.tokensEarned += minted;
       spawnConfetti(slot.center, SLOT_TOP + 8);
       sfxJackpot();
-      if (window.NovaWheel) window.NovaWheel.awardToken(tokensWon, "jackpot");
-      flyTokenToHud(slot);
+      addToPot(minted, slot);
+
+      if (plunging) {
+        // The plunge ball found the jackpot: the whole pot doubles, including
+        // the token it just minted.
+        state.overflow.hit = true;
+        state.pot *= 2;
+        updatePotUi();
+        state.flash = REDUCED_MOTION ? 0.16 : 0.5;
+        addFloatingText(
+          slot.center,
+          SLOT_TOP - 92,
+          `POT ×2 · ${state.pot}`,
+          C.gold,
+          27,
+          1.9
+        );
+        spawnConfetti(slot.center, SLOT_TOP - 10);
+        sfxDoublePot();
+      }
+
       haptic([0, 28, 36, 70]);
     } else if (slot.bonus) {
       state.flash = 0.08;
@@ -1171,7 +1274,13 @@
       slot.jackpot ? 1.8 : 0.9
     );
 
-    const announcement = `${slot.jackpot ? `Jackpot! ${1 + bonuses.tokenBonus} Nova Token${bonuses.tokenBonus > 0 ? "s" : ""} earned. ` : ""}Ball landed in ${slot.label} for ${formatScore(points)} points. ${state.ballsLeft} ball${state.ballsLeft === 1 ? "" : "s"} left.`;
+    const announcement = `${
+      slot.jackpot
+        ? `Jackpot! ${minted} Nova Token${minted === 1 ? "" : "s"} into the pot. `
+        : ""
+    }Ball landed in ${slot.label} for ${formatScore(points)} points. ${state.ballsLeft} ball${
+      state.ballsLeft === 1 ? "" : "s"
+    } left.`;
     ui.announcer.textContent = announcement;
 
     updateHud(true);
@@ -1197,9 +1306,180 @@
     if (element === ui.score) scoreBumpTimer = timeout;
   }
 
+  // ---- The pot -------------------------------------------------------------
+  // Jackpot tokens are minted into a pot instead of straight into the wallet.
+  // Banking is always available and always free, so the pot is a question about
+  // greed and never about risk: the worst case is that you keep what you have.
+  function addToPot(amount, slot) {
+    if (amount <= 0) return;
+
+    state.pot += amount;
+    updatePotUi();
+
+    if (ui.potStrip) {
+      ui.potStrip.classList.remove("pot-pop");
+      void ui.potStrip.offsetWidth;
+      ui.potStrip.classList.add("pot-pop");
+    }
+    if (slot) flyTokenToHud(slot);
+    showGameToast(`POT · ${state.pot} TOKEN${state.pot === 1 ? "" : "S"}`);
+  }
+
+  function updatePotUi() {
+    const has = state.pot > 0;
+    if (ui.potStrip) {
+      if (ui.potStrip.hidden === has) ui.potStrip.hidden = !has;
+      ui.potStrip.setAttribute(
+        "aria-label",
+        has ? `${state.pot} token${state.pot === 1 ? "" : "s"} in the pot` : "Pot empty"
+      );
+    }
+    if (ui.potCount) setText(ui.potCount, String(state.pot), false);
+    if (ui.bankBtn) {
+      ui.bankBtn.disabled = !has;
+      ui.bankBtn.textContent = has ? `BANK ${state.pot}` : "BANK";
+    }
+  }
+
+  function bankPot(source) {
+    const amount = state.pot;
+    if (amount <= 0) return 0;
+
+    state.pot = 0;
+    updatePotUi();
+    if (window.NovaWheel && typeof window.NovaWheel.awardToken === "function") {
+      window.NovaWheel.awardToken(amount, source || "banked");
+    }
+    return amount;
+  }
+
+  // ---- Nova overflow -------------------------------------------------------
+  // A run that minted anything ends on a decision instead of a receipt.
+  function offerOverflow() {
+    state.status = "overflow";
+    state.overflow.active = false;
+    state.overflow.hit = false;
+
+    ui.gameOver.dataset.mode = "overflow";
+    if (ui.overlayKicker) ui.overlayKicker.textContent = "NOVA OVERFLOW";
+    if (ui.finalTitle) ui.finalTitle.textContent = "DOUBLE THE POT";
+    if (ui.finalScore) ui.finalScore.textContent = String(state.pot);
+    if (ui.overflowNote) ui.overflowNote.hidden = false;
+    if (ui.overflowMeta) ui.overflowMeta.hidden = false;
+    if (ui.plungeCount) {
+      ui.plungeCount.textContent = `${state.overflow.plunges} PLUNGE${
+        state.overflow.plunges === 1 ? "" : "S"
+      } LEFT · A JACKPOT MAKES IT ${state.pot * 2}`;
+    }
+    if (ui.overflowUnit) ui.overflowUnit.hidden = false;
+    if (ui.plungeBtn) {
+      ui.plungeBtn.hidden = false;
+      ui.plungeBtn.textContent = "PLUNGE";
+    }
+    if (ui.bankOverlayBtn) {
+      ui.bankOverlayBtn.hidden = false;
+      ui.bankOverlayBtn.textContent = `BANK ${state.pot}`;
+    }
+    if (ui.againBtn) ui.againBtn.hidden = true;
+    if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = true;
+    if (ui.newBest) ui.newBest.classList.remove("show");
+
+    ui.gameOver.classList.add("show");
+    ui.gameOver.setAttribute("aria-hidden", "false");
+    updateHud(true);
+    sfxOverflowOffer();
+    haptic([0, 18, 44, 26]);
+    ui.announcer.textContent = `Overflow. ${state.pot} tokens in the pot. Plunge for one more ball, or bank it.`;
+
+    window.clearTimeout(state.overflowFocusTimer);
+    state.overflowFocusTimer = window.setTimeout(() => {
+      if (state.status === "overflow" && ui.plungeBtn) {
+        ui.plungeBtn.focus({ preventScroll: true });
+      }
+    }, 440);
+
+    // A sweeper is not here to deliberate, but it should still be possible to
+    // see what the machine decided, so the auto plunge is slow on purpose.
+    if (state.auto) {
+      window.clearTimeout(state.overflowAutoTimer);
+      state.overflowAutoTimer = window.setTimeout(() => {
+        if (state.status === "overflow") plunge();
+      }, 1500);
+    }
+  }
+
+  function plunge() {
+    if (state.status !== "overflow") return;
+
+    window.clearTimeout(state.overflowAutoTimer);
+    state.overflow.plunges -= 1;
+    state.overflow.active = true;
+    state.overflow.resolved = false;
+    state.overflow.hit = false;
+    state.status = "playing";
+
+    ui.gameOver.classList.remove("show");
+    ui.gameOver.setAttribute("aria-hidden", "true");
+
+    // The plunge ball is a last ball in every way that matters, so the cinema
+    // gets re-armed for it: the slow-motion close-up is the whole point.
+    state.finalBallDone = false;
+    state.cinemaFired = false;
+    state.sceneBall = null;
+    state.ballsLeft = 1;
+    state.aimX = CENTER_X + (Math.random() - 0.5) * 120;
+    if (ui.finalChip) {
+      ui.finalChip.classList.remove("on");
+      ui.finalChip.dataset.on = "false";
+    }
+
+    sfxPlunge();
+    ui.announcer.textContent = "Plunge. One ball, aimed by the machine.";
+    updateHud(true);
+
+    window.clearTimeout(state.overflowDropTimer);
+    state.overflowDropTimer = window.setTimeout(() => {
+      if (state.status === "playing" && state.ballsLeft > 0) dropBall();
+    }, 520);
+  }
+
+  // ---- Board heat ----------------------------------------------------------
+  function addHeat(amount) {
+    if (state.hot || amount <= 0) return;
+    state.heat = Math.min(HEAT_MAX, state.heat + amount);
+    if (state.heat >= HEAT_MAX) igniteBoard();
+  }
+
+  function igniteBoard() {
+    state.hot = true;
+    state.hotTimer = HOT_SECONDS;
+    state.heat = HEAT_MAX;
+    state.flash = Math.max(state.flash, REDUCED_MOTION ? 0.1 : 0.22);
+    state.flashColor = C.gold;
+    addFloatingText(CENTER_X, 292, "BOARD HOT", C.gold, 25, 1.6);
+    addFloatingText(CENTER_X, 318, "+1 TOKEN PER JACKPOT", "#ffe6b8", 11, 1.6);
+    spawnSparks(CENTER_X, 320, C.gold, 26, 1.6);
+    sfxBoardHot();
+    haptic([0, 26, 40, 60]);
+    ui.announcer.textContent = `Board hot for ${HOT_SECONDS} seconds. Every jackpot mints one extra token.`;
+  }
+
+  function updateHeat(dt) {
+    if (state.hot) {
+      state.hotTimer = Math.max(0, state.hotTimer - dt);
+      if (state.hotTimer <= 0) {
+        state.hot = false;
+        state.heat = 0;
+      }
+      return;
+    }
+    if (state.heat > 0) state.heat = Math.max(0, state.heat - HEAT_DECAY * dt);
+    if (state.heat >= HEAT_MAX) igniteBoard();
+  }
+
   function dropBall() {
     if (window.NovaWheel && window.NovaWheel.isOpen()) return;
-    if (state.status === "over" || state.status === "ending") return;
+    if (state.status === "over" || state.status === "ending" || state.status === "overflow") return;
     if (state.ballsLeft <= 0) return;
 
     const now = performance.now();
@@ -1311,6 +1591,9 @@
     }
 
     if (state.status === "over" || state.status === "ending") return;
+    // The overflow offer owns the next move; the sweeper waits for it instead
+    // of queueing a drop the board would refuse.
+    if (state.status === "overflow") return;
 
     dropBall();
     scheduleAutoDrop();
@@ -1357,26 +1640,60 @@
         return;
       }
 
-      state.status = "over";
-      const isNewBest = state.score > state.runBestStart;
-      ui.finalTitle.textContent = isNewBest
-        ? "NEW HIGH SCORE"
-        : state.score >= 10000
-          ? "JACKPOT HUNTER"
-          : "NICE DROP";
-      ui.finalScore.textContent = formatScore(state.score);
-      ui.finalBest.textContent = formatScore(state.best);
-      ui.newBest.classList.toggle("show", isNewBest);
-      updateVaultReport();
-      ui.gameOver.classList.add("show");
-      ui.gameOver.setAttribute("aria-hidden", "false");
-      updateHud(true);
-      sfxRunOver();
+      const wasPlunge = state.overflow.resolved;
+      const plungeHit = state.overflow.hit;
+      state.overflow.resolved = false;
+      state.overflow.active = false;
 
-      window.setTimeout(() => {
-        if (state.status === "over") ui.againBtn.focus({ preventScroll: true });
-      }, 420);
+      // A plunge that misses is not a punishment: the pot banks untouched and
+      // the run simply ends. Nothing that was already earned can be lost.
+      if (wasPlunge && !plungeHit) {
+        bankPot("banked");
+        showRunReport();
+        return;
+      }
+
+      if (state.pot > 0 && state.overflow.plunges > 0) {
+        offerOverflow();
+        return;
+      }
+
+      if (state.pot > 0) bankPot("banked");
+      showRunReport();
     }, 720);
+  }
+
+  function showRunReport() {
+    state.status = "over";
+    const isNewBest = state.score > state.runBestStart;
+
+    ui.gameOver.dataset.mode = "report";
+    if (ui.overlayKicker) ui.overlayKicker.textContent = "RUN COMPLETE";
+    if (ui.overflowNote) ui.overflowNote.hidden = true;
+    if (ui.overflowMeta) ui.overflowMeta.hidden = true;
+    if (ui.overflowUnit) ui.overflowUnit.hidden = true;
+    if (ui.plungeBtn) ui.plungeBtn.hidden = true;
+    if (ui.bankOverlayBtn) ui.bankOverlayBtn.hidden = true;
+    if (ui.againBtn) ui.againBtn.hidden = false;
+    if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = false;
+
+    ui.finalTitle.textContent = isNewBest
+      ? "NEW HIGH SCORE"
+      : state.score >= 10000
+        ? "JACKPOT HUNTER"
+        : "NICE DROP";
+    ui.finalScore.textContent = formatScore(state.score);
+    ui.finalBest.textContent = formatScore(state.best);
+    ui.newBest.classList.toggle("show", isNewBest);
+    updateVaultReport();
+    ui.gameOver.classList.add("show");
+    ui.gameOver.setAttribute("aria-hidden", "false");
+    updateHud(true);
+    sfxRunOver();
+
+    window.setTimeout(() => {
+      if (state.status === "over") ui.againBtn.focus({ preventScroll: true });
+    }, 420);
   }
 
   function updateVaultReport(summary) {
@@ -1442,7 +1759,23 @@
 
   function resetGame() {
     window.clearTimeout(state.overTimer);
+    window.clearTimeout(state.overflowAutoTimer);
+    window.clearTimeout(state.overflowDropTimer);
+    window.clearTimeout(state.overflowFocusTimer);
     clearAutoTimer();
+
+    // Restarting mid-run keeps the pot: it is money the player already won, so
+    // it goes to the wallet instead of evaporating.
+    if (state.pot > 0) bankPot("banked");
+    state.overflow.active = false;
+    state.overflow.resolved = false;
+    state.overflow.hit = false;
+    state.overflow.plunges = PLUNGE_BALLS;
+    state.heat = 0;
+    state.hot = false;
+    state.hotTimer = 0;
+    updatePotUi();
+
     state.status = "ready";
     state.started = false;
     state.runStats = { jackpots: 0, tokensEarned: 0, bestChain: 0 };
@@ -1479,6 +1812,15 @@
 
     ui.gameOver.classList.remove("show");
     ui.gameOver.setAttribute("aria-hidden", "true");
+    ui.gameOver.dataset.mode = "report";
+    if (ui.overlayKicker) ui.overlayKicker.textContent = "RUN COMPLETE";
+    if (ui.overflowNote) ui.overflowNote.hidden = true;
+    if (ui.overflowMeta) ui.overflowMeta.hidden = true;
+    if (ui.overflowUnit) ui.overflowUnit.hidden = true;
+    if (ui.plungeBtn) ui.plungeBtn.hidden = true;
+    if (ui.bankOverlayBtn) ui.bankOverlayBtn.hidden = true;
+    if (ui.againBtn) ui.againBtn.hidden = false;
+    if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = false;
     ui.newBest.classList.remove("show");
     ui.score.classList.remove("bump");
     ui.balls.parentElement.classList.remove("bump");
@@ -1555,7 +1897,10 @@
     );
 
     const canDrop =
-      state.ballsLeft > 0 && state.status !== "ending" && state.status !== "over";
+      state.ballsLeft > 0 &&
+      state.status !== "ending" &&
+      state.status !== "over" &&
+      state.status !== "overflow";
     if (ui.dropBtn.disabled === canDrop) ui.dropBtn.disabled = !canDrop;
     setText(
       ui.dropBtn.querySelector("span"),
@@ -1685,6 +2030,7 @@
 
     buildCabinetLayers();
     ctx.drawImage(cabinetLayer, 0, 0, W, H);
+    drawHeatBezel();
 
     // The cabinet stays put and the camera looks closer through the glass.
     if (state.cinema > 0.004 && state.cinemaFocus) {
@@ -2153,7 +2499,105 @@
     ctx.restore();
   }
 
+  // Board heat lives on the cabinet's own bezel, not inside the glass: a
+  // filament under the marquee that fills as the field warms up and then floods
+  // gold for the hot window. It sits outside the camera clip, so it holds still
+  // while the last ball gets its close-up.
+  function drawHeatBezel() {
+    const left = 128;
+    const right = W - 128;
+    const width = right - left;
+    const y = 64;
+    const height = 4;
+    const ratio = clamp(state.heat / HEAT_MAX, 0, 1);
+    const hot = state.hot;
+    const pulse = hot ? 0.62 + Math.sin(state.time * 6.2) * 0.3 : 1;
+
+    ctx.save();
+
+    roundPath(left, y, width, height, height / 2);
+    ctx.fillStyle = "rgba(5, 9, 20, 0.92)";
+    ctx.fill();
+
+    if (ratio > 0.002) {
+      const paint = ctx.createLinearGradient(left, 0, right, 0);
+      paint.addColorStop(0, hexToRgba(C.cyan, 0.9));
+      paint.addColorStop(0.58, hexToRgba(C.violet, 0.92));
+      paint.addColorStop(1, hexToRgba(C.gold, 0.98));
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = hot ? Math.min(1, pulse + 0.12) : 0.92;
+      ctx.fillStyle = paint;
+      roundPath(left, y, Math.max(height, width * ratio), height, height / 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // The lit head of the filament, so the bar reads as a charge travelling
+    // along the bezel instead of a progress bar pasted on top of it.
+    if (ratio > 0.02) {
+      const headX = left + width * ratio;
+      const reach = hot ? 34 : 18;
+      const glow = ctx.createRadialGradient(headX, y + height / 2, 0, headX, y + height / 2, reach);
+      glow.addColorStop(0, hexToRgba(hot ? "#fff0c6" : C.cyan, hot ? 0.62 * pulse : 0.3));
+      glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = glow;
+      ctx.fillRect(headX - reach, y - reach, reach * 2, reach * 2);
+      ctx.restore();
+    }
+
+    const labelScale = boardTypeScale;
+    ctx.font = `800 ${7 * labelScale}px Bahnschrift, "Trebuchet MS", sans-serif`;
+    ctx.textAlign = "right";
+    ctx.fillStyle = hot
+      ? hexToRgba("#ffe3a8", Math.min(1, pulse + 0.2))
+      : "rgba(198, 207, 236, 0.72)";
+    ctx.fillText(hot ? "HOT" : "HEAT", left - 9, y + height + 1.5);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = hot
+      ? hexToRgba("#ffe3a8", Math.min(1, pulse + 0.2))
+      : "rgba(198, 207, 236, 0.55)";
+    ctx.fillText(hot ? "+1 TOKEN" : "GOLD PINS", right + 9, y + height + 1.5);
+
+    // While the board is hot, the glass is lit from the top of the cabinet.
+    if (hot) {
+      const wash = ctx.createLinearGradient(0, GLASS.y - 10, 0, GLASS.y + 300);
+      wash.addColorStop(0, hexToRgba(C.gold, 0.13 * pulse));
+      wash.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.save();
+      roundPath(GLASS.x, GLASS.y, GLASS.w, GLASS.h, GLASS.r);
+      ctx.clip();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = wash;
+      ctx.fillRect(GLASS.x, GLASS.y - 10, GLASS.w, 310);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
   function drawPins() {
+    // A hot board is not a different board, it is the same one under a warm
+    // lamp: every stud picks up a gold halo so the state is visible from the
+    // far side of the room.
+    if (state.hot) {
+      const pulse = 0.42 + Math.sin(state.time * 5.4) * 0.16;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = hexToRgba(C.gold, pulse * 0.24);
+      ctx.beginPath();
+      for (const pin of pins) {
+        ctx.moveTo(pin.x + pin.r + 6, pin.y);
+        ctx.arc(pin.x, pin.y, pin.r + 6, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.restore();
+    }
+
     for (const pin of pins) {
       const glow = pin.flash;
 
@@ -3403,6 +3847,37 @@
     tone(base * 3, 0.06, "sine", 0.004, base * 3, pan, 0.008, 0.1);
     // The pin taking the hit: a soft wooden tick with no air under it.
     tone(150, 0.085, "triangle", 0.013, 118, pan, 0, 0.04);
+  }
+
+  // Heat ignites: a warm rise, not an alarm. Three notes climbing the same
+  // pentatonic ladder the pins use, with the top one ringing out.
+  function sfxBoardHot() {
+    tone(392, 0.5, "sine", 0.03, 415, 0, 0, 0.34);
+    tone(587, 0.55, "sine", 0.024, 622, 0, 0.09, 0.34);
+    tone(880, 0.8, "triangle", 0.018, 932, 0, 0.18, 0.38);
+    tone(1175, 0.5, "sine", 0.009, 1245, 0, 0.22, 0.3);
+  }
+
+  // The overflow offer is a question, so it is two notes that do not resolve:
+  // a fourth that leans upward and stops.
+  function sfxOverflowOffer() {
+    tone(349, 0.34, "sine", 0.03, 349, 0, 0, 0.3);
+    tone(466, 0.6, "sine", 0.022, 470, 0, 0.18, 0.36);
+  }
+
+  // The machine takes the decision out of your hands and fires the ball.
+  function sfxPlunge() {
+    tone(110, 0.42, "triangle", 0.034, 220, 0, 0, 0.16);
+    tone(330, 0.3, "sine", 0.016, 494, 0, 0.06, 0.2);
+  }
+
+  // A plunge that lands: the pot doubles and the room says so.
+  function sfxDoublePot() {
+    const notes = [784, 1046, 1318, 1568];
+    notes.forEach((frequency, index) => {
+      tone(frequency, 0.3, "sine", 0.03, frequency * 1.02, 0, index * 0.07, 0.34);
+    });
+    tone(392, 0.7, "sine", 0.03, 392, 0, 0.06, 0.22);
   }
 
   // The last ball of a run: the room notices. A low swell, two heartbeats and

@@ -94,14 +94,27 @@
         <span class="lucky-x">×2</span>
       </div>
 
-      <button id="tokenBtn" class="token-card ready" type="button" aria-label="Open the Nova Prize Wheel. 1 token available.">
-        <span class="token-glyph" aria-hidden="true">✦</span>
-        <span class="token-copy">
-          <small>NOVA TOKEN</small>
-          <strong><span id="tokenCount">1</span> <em id="tokenWord">TOKEN</em></strong>
-        </span>
-        <span id="tokenCta" class="token-cta">SPIN <span aria-hidden="true">→</span></span>
-      </button>
+      <div class="token-row">
+        <button id="tokenBtn" class="token-card ready" type="button" aria-label="Open the Nova Prize Wheel. 1 token available.">
+          <span class="token-glyph" aria-hidden="true">✦</span>
+          <span class="token-copy">
+            <small>NOVA TOKEN</small>
+            <strong><span id="tokenCount">1</span> <em id="tokenWord">TOKEN</em></strong>
+          </span>
+          <span id="tokenCta" class="token-cta">SPIN <span aria-hidden="true">→</span></span>
+        </button>
+
+        <!-- Jackpot tokens land here first. Banking is always allowed, so this
+             is only ever a question of how big the pot gets, never a loss. -->
+        <div id="potStrip" class="pot-strip" hidden>
+          <span class="pot-badge" aria-hidden="true">✦</span>
+          <span class="pot-copy">
+            <small>POT</small>
+            <strong id="potCount">0</strong>
+          </span>
+          <button id="bankBtn" class="pot-bank" type="button" aria-label="Bank the pot into tokens">BANK</button>
+        </div>
+      </div>
 
       <div class="actions">
         <button id="dropBtn" class="drop-btn" type="button">
@@ -139,9 +152,16 @@
 
       <div id="gameOver" class="overlay" aria-hidden="true">
         <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="finalTitle">
-          <span class="overlay-kicker">RUN COMPLETE</span>
+          <span id="overlayKicker" class="overlay-kicker">RUN COMPLETE</span>
           <h2 id="finalTitle">NICE DROP</h2>
           <div id="finalScore" class="final-score">0</div>
+          <span id="overflowUnit" class="overflow-unit" hidden>TOKENS IN POT</span>
+          <p id="overflowNote" class="overflow-note" hidden>
+            One more ball. Every jackpot <b>doubles the pot</b>. A miss just banks it — nothing you have earned can be lost.
+          </p>
+          <div id="overflowMeta" class="overflow-meta" hidden>
+            <span id="plungeCount">3 PLUNGES LEFT</span>
+          </div>
           <div class="final-meta">
             <span>PERSONAL BEST <strong id="finalBest">0</strong></span>
             <span id="newBest" class="new-best">NEW BEST</span>
@@ -166,6 +186,8 @@
           <div class="overlay-actions">
             <button id="againBtn" class="again-btn" type="button">PLAY AGAIN</button>
             <button id="overlayVaultBtn" class="again-btn ghost" type="button">OPEN VAULT</button>
+            <button id="plungeBtn" class="again-btn plunge-btn" type="button" hidden>PLUNGE</button>
+            <button id="bankOverlayBtn" class="again-btn ghost" type="button" hidden>BANK POT</button>
           </div>
         </div>
       </div>

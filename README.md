@@ -25,9 +25,23 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - Every run starts with 12 balls by default. The board has a guarded center jackpot, two bonus-ball slots, and chain multipliers for pin hits. Relics can alter the starting count, chain cadence, lucky-ball cadence, score, bonus slots, and jackpot token payout.
 - Every fifth ball is gold and doubles its final payout by default.
 
+**The pot, and the overflow**
+
+- Jackpot tokens do not go straight into your wallet any more. They mint into the **POT**, a gold strip that appears next to the token card, and they sit there until you bank them.
+- **Bank whenever you like** — the **BANK** button on the strip, or **B**. Banking is instant, free, and possible at any moment, including one ball into a run. The pot is never a thing you can lose by looking away.
+- When a run ends with anything in the pot, the cabinet offers **NOVA OVERFLOW**: **PLUNGE** drops one extra ball, aimed by the machine. If it lands in the jackpot, the whole pot **doubles** and you are offered another. Anything else pays the pot out untouched, which is the whole point: the only thing riding on a plunge is how much bigger the pot gets.
+- Three plunges per run, so the ceiling is two doubles. The plunge ball gets the full final-ball scene — the slow-motion close-up, the grade, the tiered landing sound — so it feels like a last ball even when it is the fifth one.
+- **Sweep** takes the plunge on its own after a short pause, so an auto run never stalls on a decision.
+
+**Board heat**
+
+- The filament under the marquee is the board's temperature. Every pin hit nudges it, and a **gold bumper is worth about twenty ordinary pins**, so a run that keeps finding the lucky studs heats up while a slow one never gets there.
+- At full, the board runs **HOT for nine seconds**: the filament floods gold, every stud picks up a warm halo, the glass is lit from the top of the cabinet, and every jackpot mints **one extra token**. Gold bumpers also kick a little harder for the duration, so the payout rail is one bounce closer.
+- It decays on its own, which is what makes a full bar feel earned rather than scheduled. Hits made while hot do not bank progress toward the next one.
+
 **The Nova Vault**
 
-- A ball landing in the center **2500 JACKPOT** slot mints **1 Nova Token**.
+- A ball landing in the center **2500 JACKPOT** slot mints **1 Nova Token into the pot**. Bank it whenever you like, or finish the run and plunge for a chance to double it — nothing in the pot can be lost.
 - New players receive one welcome token on their first visit.
 - Open the gold **Nova Token** card in the side panel to enter the prize wheel.
 - Spend **1 token** to spin. The wheel chooses 1 of 8 reward branches.

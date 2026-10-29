@@ -2597,7 +2597,10 @@
     el.tokenBtn.classList.add("token-pop");
     window.setTimeout(() => el.tokenBtn.classList.remove("token-pop"), 520);
 
-    const sourceLabel = source === "jackpot" ? "JACKPOT" : "TOKEN";
+    // "banked" arrives when a pot is cashed out; it is worth naming, because
+    // the player just chose to take the tokens instead of plunging for more.
+    const sourceLabel =
+      source === "jackpot" ? "JACKPOT" : source === "banked" ? "BANKED" : "TOKEN";
     showToast(
       `${sourceLabel} · +${quantity} NOVA TOKEN${quantity === 1 ? "" : "S"}`,
       "gold"
