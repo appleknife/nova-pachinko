@@ -259,6 +259,11 @@
   // pairs. Finishing one pays shards of its own rarity, which makes the pairs a
   // steady drip towards a forge rather than a separate currency.
   const PAIR_SHARD_BONUS = 3;
+  // Mythic shards only ever come from mythic duplicates, which is a closed door:
+  // you cannot forge a mythic until you already own one. Five legendary shards —
+  // exactly one legendary duplicate — trade up into one mythic shard, so the
+  // door always has a handle. The ladder stops there; epics do not trade up.
+  const LEGEND_PER_MYTHIC = 5;
 
   const POWER_BY_RARITY = {
     common: 1,
@@ -805,6 +810,16 @@
       label.textContent = rarity.short;
 
       chip.append(count, label);
+
+      if (rarity.id === "legendary") {
+        chip.addEventListener("click", () => tradeUpShards());
+        chip.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+          event.preventDefault();
+          tradeUpShards();
+        });
+      }
+
       el.vaultShards.appendChild(chip);
       shardChips.set(rarity.id, chip);
     }
@@ -820,13 +835,30 @@
       const count = chip.querySelector(".shard-count");
       if (count) count.textContent = String(value);
       chip.classList.toggle("ready", value >= FORGE_COST);
+
+      const canTrade = rarity.id === "legendary" && value >= LEGEND_PER_MYTHIC;
+      chip.classList.toggle("tradeable", canTrade);
+      if (rarity.id === "legendary") {
+        if (canTrade) {
+          chip.setAttribute("role", "button");
+          chip.setAttribute("tabindex", "0");
+          chip.setAttribute("title", `Trade ${LEGEND_PER_MYTHIC} legendary shards for 1 mythic shard`);
+        } else {
+          chip.removeAttribute("role");
+          chip.removeAttribute("tabindex");
+          chip.removeAttribute("title");
+        }
+      }
+
       chip.setAttribute(
         "aria-label",
-        `${rarity.name}: ${value} shard${value === 1 ? "" : "s"}${
-          value >= FORGE_COST
-            ? `, enough to forge any locked ${rarity.name}`
-            : `, ${FORGE_COST - value} more to forge`
-        }`
+        canTrade
+          ? `Legendary: ${value} shards. Activate to trade ${LEGEND_PER_MYTHIC} for one mythic shard.`
+          : `${rarity.name}: ${value} shard${value === 1 ? "" : "s"}${
+              value >= FORGE_COST
+                ? `, enough to forge any locked ${rarity.name}`
+                : `, ${FORGE_COST - value} more to forge`
+            }`
       );
     }
 
@@ -894,6 +926,26 @@
     pulseHaptic([0, 35, 45, 80]);
     dispatchSfx("constellation");
     sky.burst = { branchId, start: performance.now() };
+  }
+
+  function tradeUpShards() {
+    const legendary = wheel.shards.legendary || 0;
+    if (legendary < LEGEND_PER_MYTHIC) return;
+
+    wheel.shards.legendary = legendary - LEGEND_PER_MYTHIC;
+    wheel.shards.mythic = (wheel.shards.mythic || 0) + 1;
+    saveShards();
+    updateShardStrip();
+
+    const chip = shardChips.get("mythic");
+    if (chip) {
+      chip.classList.remove("chip-pop");
+      void chip.offsetWidth;
+      chip.classList.add("chip-pop");
+    }
+
+    showToast(`TRADE UP · ${LEGEND_PER_MYTHIC} LEGEND ◆ → 1 MYTHIC ◆`, "gold");
+    dispatchSfx("pair");
   }
 
   function canForge(item) {
