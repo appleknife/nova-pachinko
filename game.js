@@ -185,6 +185,11 @@
   let spinTickCount = 0;
   let backingScale = 0;
   let scaleCap = 0;
+  // Canvas text is measured in board units, and the board is drawn about half
+  // size on a phone, so the same 10px label lands at 5 CSS pixels there. This
+  // factor keeps the labels at a readable on-screen size instead: 1 on a
+  // desktop-sized board, up to 2 on a phone.
+  let boardTypeScale = 1;
   // 0 = auto (adapts), 1 = high (always full scale), 2 = low (always reduced).
   const QUALITY_KEY = "nova-pachinko-quality-v1";
   let qualityMode = clamp(loadNumber(QUALITY_KEY, 0), 0, 2);
@@ -499,6 +504,9 @@
       canvas.width = width;
       canvas.height = height;
     }
+    // 0.92 CSS px per board unit is the desktop board these sizes were drawn
+    // for, so a smaller board scales the type up to keep the same read.
+    boardTypeScale = clamp(0.92 / ((rect.width > 4 ? rect.width : W) / W), 1, 2);
   }
 
   function updateQualityUi() {
@@ -1101,33 +1109,32 @@
 
     addFloatingText(
       slot.center,
-      SLOT_TOP - 18 - Math.random() * 5,
+      SLOT_TOP - 48 - Math.random() * 5,
       `+${formatScore(points)}`,
       ball.gold ? C.gold : slot.color,
       slot.jackpot ? 30 : 23,
       1.45
     );
 
+    // The chain and the bonus ball share one line. Two separate lines of small
+    // print under every payout turned the slot row into a wall of text once the
+    // type scaled with the board on a phone.
+    const notes = [];
     if (multiplier > 1) {
-      addFloatingText(
-        slot.center,
-        SLOT_TOP + 9,
-        `×${multiplier}${ball.gold ? " LUCKY" : " CHAIN"}`,
-        multiplier >= 6 ? C.gold : C.violet,
-        10,
-        1.25
-      );
+      notes.push(`×${multiplier}${ball.gold ? " LUCKY" : " CHAIN"}`);
     }
-
     if (slot.bonus) {
-      const ballsWon = slot.bonus + bonuses.bonusBallExtra;
+      const extra = slot.bonus + bonuses.bonusBallExtra;
+      notes.push(`+${extra} BALL${extra === 1 ? "" : "S"}`);
+    }
+    if (notes.length) {
       addFloatingText(
         slot.center,
-        SLOT_TOP + 28,
-        `+${ballsWon} BALL${ballsWon === 1 ? "" : "S"}`,
-        C.violet,
-        11,
-        1.35
+        SLOT_TOP - 22,
+        notes.join(" · "),
+        multiplier >= 6 || ball.gold ? C.gold : C.violet,
+        notes.length > 1 ? 13 : 14,
+        1.3
       );
     }
 
@@ -1906,7 +1913,7 @@
     ctx.fillStyle = topGradient;
     ctx.fillRect(GLASS.x, GLASS.y, GLASS.w, 92);
 
-    ctx.font = '700 7px Bahnschrift, "Trebuchet MS", sans-serif';
+    ctx.font = `700 ${7 * Math.min(boardTypeScale, 1.45)}px Bahnschrift, "Trebuchet MS", sans-serif`;
     ctx.fillStyle = "rgba(213, 194, 166, 0.38)";
     ctx.textAlign = "center";
     drawSpacedText("DROP ZONE", W / 2, 103, 2.6);
@@ -2015,8 +2022,33 @@
     return gradient;
   }
 
+  // Shrinks the current font until the label (plus its letter spacing) fits the
+  // slot. The numbers now scale with the board, and "2500" in the narrow
+  // jackpot slot is the one label that would otherwise run into its neighbours.
+  function fitLabel(text, size, family, spacing, maxWidth) {
+    let current = size;
+    let gap = spacing;
+    for (let pass = 0; pass < 4; pass++) {
+      ctx.font = `700 ${current}px ${family}`;
+      const chars = Array.from(text).length;
+      const width = ctx.measureText(text).width + (chars > 1 ? gap * (chars - 1) : 0);
+      if (width <= maxWidth) break;
+      const ratio = maxWidth / width;
+      current *= ratio;
+      gap *= ratio;
+    }
+    return gap;
+  }
+
   function drawSlots() {
     ctx.save();
+    // Numbers scale with the board so they stay the same size on screen; the
+    // little sub-labels (PTS, BALL, JACKPOT) get a gentler lift so they still
+    // fit inside a narrow slot on a phone.
+    const big = boardTypeScale;
+    const small = Math.min(boardTypeScale, 1.45);
+    const mono = '"Cascadia Mono", "Lucida Console", monospace';
+    const ui = 'Bahnschrift, "Trebuchet MS", sans-serif';
     for (const slot of slots) {
       const gradient = cachedGradient(`slot:${slot.x}`, () => {
         const paint = ctx.createLinearGradient(0, SLOT_TOP, 0, SLOT_BOTTOM);
@@ -2043,24 +2075,22 @@
         ctx.save();
         ctx.shadowColor = hexToRgba(C.gold, 0.7);
         ctx.shadowBlur = 12 + slot.flash * 20;
-        ctx.font = '700 19px "Cascadia Mono", "Lucida Console", monospace';
+        fitLabel(slot.label, 19 * big, mono, 0, slot.w - 14);
         ctx.fillStyle = "#ffe5a8";
         ctx.fillText(slot.label, slot.center, SLOT_TOP + 45);
         ctx.restore();
 
-        ctx.font = '700 6.5px Bahnschrift, "Trebuchet MS", sans-serif';
+        const gap = fitLabel(slot.sub, 6.5 * small, ui, 1.4, slot.w - 12);
         ctx.fillStyle = hexToRgba(C.gold, 0.72);
-        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 67, 1.4);
+        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 67, gap);
       } else {
-        ctx.font = slot.bonus
-          ? '700 24px "Cascadia Mono", "Lucida Console", monospace'
-          : '700 21px "Cascadia Mono", "Lucida Console", monospace';
+        fitLabel(slot.label, (slot.bonus ? 24 : 21) * big, mono, 0, slot.w - 14);
         ctx.fillStyle = hexToRgba(slot.color, 0.82);
         ctx.fillText(slot.label, slot.center, SLOT_TOP + 46);
 
-        ctx.font = '700 7px Bahnschrift, "Trebuchet MS", sans-serif';
+        const gap = fitLabel(slot.sub, 7 * small, ui, 1.5, slot.w - 12);
         ctx.fillStyle = hexToRgba(slot.color, 0.52);
-        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 68, 1.5);
+        drawSpacedText(slot.sub, slot.center, SLOT_TOP + 68, gap);
       }
 
       ctx.strokeStyle = hexToRgba(slot.color, 0.48);
@@ -2583,12 +2613,17 @@
       const alpha = Math.min(1, progress * 9, float.life / (float.maxLife * 0.3));
 
       ctx.globalAlpha = clamp(alpha, 0, 1);
-      ctx.font = `700 ${float.size}px Bahnschrift, "Trebuchet MS", sans-serif`;
-      ctx.lineWidth = 3;
+      const size = float.size * boardTypeScale;
+      ctx.font = `700 ${size}px Bahnschrift, "Trebuchet MS", sans-serif`;
+      // Bigger type on a small board would run off the sides of the glass on the
+      // edge slots, so the label is kept inside the playfield.
+      const half = ctx.measureText(float.text).width / 2 + 18;
+      const x = clamp(float.x, GLASS.x + half, GLASS.x + GLASS.w - half);
+      ctx.lineWidth = 3 * boardTypeScale;
       ctx.strokeStyle = "rgba(3, 5, 12, 0.78)";
-      ctx.strokeText(float.text, float.x, float.y);
+      ctx.strokeText(float.text, x, float.y);
       ctx.fillStyle = float.color;
-      ctx.fillText(float.text, float.x, float.y);
+      ctx.fillText(float.text, x, float.y);
     }
     ctx.restore();
   }
