@@ -325,8 +325,32 @@
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  cursor: default;
+  cursor: pointer;
   box-shadow: 0 22px 32px rgba(0, 0, 0, 0.46);
+}
+
+/* The wheel is the spin button. An empty button laid over the canvas keeps the
+   semantics honest (focusable, labelled) without restructuring the stage or
+   shrinking the wheel to make room for a caption. */
+.wheel-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wheel-hit:hover {
+  box-shadow: inset 0 0 0 2px rgba(255, 199, 95, 0.16);
+}
+
+.wheel-hit:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
 }
 
 .wheel-side {
@@ -2311,6 +2335,55 @@
     max-height: none;
     padding: 0;
     overflow: visible;
+  }
+
+  /* Phone reading order: the wheel, then the thing that spends a token, then
+     the result, then the reading material. The primary button used to sit
+     behind the intro, the reward card, the ladder, the odds box, the pity bar
+     and the spark block, which put it below the fold on most phones - you had
+     to scroll to play. The wheel itself is also a spin target now. */
+  .wheel-intro {
+    order: 1;
+  }
+
+  #spinBtn {
+    order: 2;
+  }
+
+  #rewardCard {
+    order: 3;
+  }
+
+  #spinFiveBtn {
+    order: 4;
+  }
+
+  .rarity-ladder {
+    order: 5;
+  }
+
+  .odds-box {
+    order: 6;
+  }
+
+  .pity-block {
+    order: 7;
+  }
+
+  .spark-block {
+    order: 8;
+  }
+
+  #batchList {
+    order: 9;
+  }
+
+  #skipSpin {
+    order: 10;
+  }
+
+  .wheel-note {
+    order: 11;
   }
 
   .wheel-intro h3 {

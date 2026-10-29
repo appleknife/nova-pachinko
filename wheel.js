@@ -510,6 +510,7 @@
     vaultGrid: document.getElementById("vaultGrid"),
     spinBtn: document.getElementById("spinBtn"),
     spinBtnLabel: document.getElementById("spinBtnLabel"),
+    wheelHit: document.getElementById("wheelHit"),
     skipSpin: document.getElementById("skipSpin"),
     spinFiveBtn: document.getElementById("spinFiveBtn"),
     batchList: document.getElementById("batchList"),
@@ -1700,6 +1701,12 @@
     el.tabPassport.addEventListener("click", () => setTab("passport"));
 
     el.spinBtn.addEventListener("click", spinWheel);
+    // The wheel itself is the biggest, most obvious thing in the room, so it
+    // behaves like the button. On a phone this is the difference between
+    // spinning and scrolling to find out where the button went.
+    if (el.wheelHit) {
+      el.wheelHit.addEventListener("click", spinWheel);
+    }
     el.skipSpin.addEventListener("click", skipSpin);
     el.spinFiveBtn.addEventListener("click", () => spinBatch(5));
     el.sparkBtn.addEventListener("click", armSpark);
@@ -1981,6 +1988,19 @@
     }
 
     el.spinCost.textContent = tokens > 0 ? "✦ 1" : "JACKPOT ✦1";
+
+    // Stays enabled when there is nothing to spend: tapping it is how you find
+    // out you need a jackpot, and spinWheel() answers with the toast.
+    if (el.wheelHit) {
+      el.wheelHit.setAttribute(
+        "aria-label",
+        busy
+          ? "Wheel is spinning"
+          : tokens > 0
+            ? `Spin the wheel \u2014 ${tokens} token${tokens === 1 ? "" : "s"} left`
+            : "Spin the wheel \u2014 no tokens yet, land a pachinko jackpot"
+      );
+    }
   }
 
   function updatePityUi() {
