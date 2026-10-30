@@ -23,7 +23,7 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - **Volume.** The slider next to the mute button is a master volume from **0 to 150**; **100 is the mix as tuned**, and everything above it is headroom for listening closer, not a better setting. It scales the whole cabinet — board, wheel, room tone and music stings all run through the same master bus — so nothing gets left behind when you turn it up or down. It is remembered between visits, ticks softly while you drag so you can set it by ear without dropping a ball, and **M** still mutes instantly without losing the level.
 - **Render resolution** cycles **auto → high → low** with the gauge button next to restart (or **Q** on a keyboard). It is remembered between visits. Auto is the right choice for almost everyone; use **low** if a device still stutters, **high** if your GPU has headroom and you want maximum sharpness.
 - Every run starts with 12 balls by default. The board has a guarded center jackpot, two bonus-ball slots, and chain multipliers for pin hits. Relics can alter the starting count, chain cadence, lucky-ball cadence, score, bonus slots, and jackpot token payout.
-- Every fifth ball is gold and doubles its final payout by default.
+- **The ball deck.** Four one-shot balls sit in the panel, and you pick one before a drop (click a chip, or **1-4** on a keyboard): **HEAVY** barely answers a pin and drives straight down, **BOUNCY** answers with interest and ricochets, **TINY** slips through the gaps, and **ENCORE** comes back for one more drop if it does not find the jackpot. A pick is spent on that drop whatever it hits, and the deck reverts to standard afterwards, so you choose each time rather than setting a mode. Every fifth drop (relics can change the cadence) hands over a **charge**: one random ball added back to the deck, instead of the old silent ×2 gold ball.
 
 **The pot, and the overflow**
 
@@ -103,7 +103,7 @@ Completing every item in a branch unlocks its set relic:
 | Lunar | Tidecaller | +1 starting ball each run |
 | Neon | Overcharge | Chain tiers every 4 hits instead of 5 |
 | Circuit | Goldwire | Gold pins add +3 chain hits |
-| Star | Lucky Orbit | A lucky gold ball every 4th drop |
+| Star | Lucky Orbit | A deck charge every 4th drop |
 | Holo | Prism Finish | +15% score from every slot |
 | Boost | Overflow | Bonus slots add +1 extra ball |
 | Wild | Double or Nothing | Bonus-slot points are doubled |
@@ -136,7 +136,7 @@ All sharing works locally; there is no account or server.
 - **Gold pins are bumpers.** They count as two bounce-chain hits, light up when struck, and any ball that touches one leaves at **launch speed** — around 820 to 1360 px/s, roughly three times a normal fall — instead of dribbling away at whatever speed it arrived with. The launch is aimed down-field, never back up the board, so a hit reads as the pin punching the ball towards the payout rail. A ball that lands on top of one is smacked down and out rather than straight back up, so nothing can hover on a bumper.
 - The two guards directly above the jackpot are deliberately never lucky: they are the funnel, and a bumper there would fire balls away from the token slot.
 - **The board reshapes every run.** The four large deflectors are always mirrored about the centre line — two lucky studs facing each other, plus the pair of guards above the jackpot — but which row the mirrored pair sits on, and how wide it is spread, is rolled per run. The four lucky pins each run are the mirrored pair plus two regular pins from the field. Large deflectors that did not roll lucky are cool satin studs, so a plain big pin still reads as part of the board.
-- **Every fifth drop** is a lucky gold ball worth ×2 on its slot payout, unless a relic changes the cadence.
+- **Every fifth drop** adds a ball to the deck instead of being a special ball of its own. The lucky-ball mechanic and the deck are one system now: a charge is the reward for the interval, and the choice of what to drop with it is the deck's.
 - **Bonus slots** add a ball back to the run.
 - **Auto drop** is always available from the first run — it is a pace control, not a collection unlock.
 - The 80 individual rewards are intentionally placeholder loot; their mastery and Dust feed the meta systems, while full branch sets unlock real relic effects.

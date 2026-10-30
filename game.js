@@ -24,8 +24,8 @@
     chainHits: document.getElementById("chainHits"),
     chainRule: document.getElementById("chainRule"),
     runBallRule: document.getElementById("runBallRule"),
-    luckyCard: document.getElementById("luckyCard"),
-    luckyText: document.getElementById("luckyText"),
+    deckRow: document.getElementById("deckRow"),
+    deckCharge: document.getElementById("deckCharge"),
     dropBtn: document.getElementById("dropBtn"),
     autoBtn: document.getElementById("autoBtn"),
     aimHint: document.getElementById("aimHint"),
@@ -83,6 +83,11 @@
   const AUTO_DROP_KEY = "nova-pachinko-auto-v1";
   const AUTO_DROP_MS = 190;
   const AUTO_SWEEP_SECONDS = 2.3;
+
+  // The deck: four one-shot balls per run, plus whatever a charge drop hands you.
+  const DECK_START = { heavy: 2, bouncy: 2, tiny: 2, encore: 1 };
+  const DECK_ORDER = ["heavy", "bouncy", "tiny", "encore"];
+  const DECK_MAX = 4;
 
   // Board heat. A lucky bumper is worth 11 heat and a plain pin about half a
   // point, so a run that keeps finding the gold studs heats up every couple of
@@ -204,6 +209,8 @@
     pot: 0,
     // Everything the wheel handed over during this run, for the run card.
     runLoot: [],
+    deck: { ...DECK_START },
+    armed: null,
     overflow: { active: false, resolved: false, hit: false, plunges: PLUNGE_BALLS },
     heat: 0,
     hot: false,
@@ -213,6 +220,28 @@
     plungeScene: false
   };
   state.runBestStart = state.best;
+
+  // Declared before the init sequence below, which builds the deck through it.
+  const deckChips = new Map();
+
+  // Each ball type is a small set of physics knobs plus a look. The deck is the
+  // only place a ball is chosen, which is why the old every-fifth gold ball is
+  // gone: it used to be a second, silent special case fighting this one.
+  const BALL_TYPES = {
+    standard: { label: "STD", rest: 1, scale: 1, look: "standard" },
+    heavy: { label: "HEAVY", rest: 0.42, scale: 1.12, look: "heavy" },
+    bouncy: { label: "BOUNCY", rest: 1.5, scale: 0.96, look: "bouncy" },
+    tiny: { label: "TINY", rest: 1.05, scale: 0.6, look: "tiny" },
+    encore: { label: "ENCORE", rest: 1, scale: 1, look: "encore" }
+  };
+
+  const BALL_LOOK = {
+    standard: { aura: null, stops: ["#ffffff", "#e6fffb", "#a3f5e8", "#398e91"], ring: "rgba(217, 255, 250, 0.64)" },
+    heavy: { aura: "255, 168, 108", stops: ["#fff7ee", "#ffd9bd", "#c98a5c", "#5f3a22"], ring: "rgba(255, 214, 170, 0.72)" },
+    bouncy: { aura: "120, 255, 210", stops: ["#ffffff", "#e6fff6", "#86f2cf", "#1c8a6c"], ring: "rgba(180, 255, 230, 0.75)" },
+    tiny: { aura: "150, 225, 255", stops: ["#ffffff", "#eafdff", "#b9f5ff", "#3f8fa0"], ring: "rgba(220, 250, 255, 0.7)" },
+    encore: { aura: "255, 204, 104", stops: ["#fffef1", "#ffe3a0", "#d99128", "#7b4111"], ring: "rgba(255, 242, 194, 0.72)" }
+  };
 
   let audioCtx = null;
   let audioBus = null;
@@ -265,6 +294,7 @@
   updateVolumeUi();
   updateQualityUi();
   updateAutoButton();
+  buildDeck();
   updateHud(true);
   requestAnimationFrame(frame);
 
@@ -396,6 +426,10 @@
       } else if (key === "q") {
         event.preventDefault();
         setQualityMode((qualityMode + 1) % 3);
+      } else if (key >= "1" && key <= "4") {
+        // 1-4 arm a ball from the deck, in the order the chips are drawn.
+        event.preventDefault();
+        armBall(DECK_ORDER[Number(key) - 1]);
       } else if (key === "b") {
         // B banks. It is the only key that can spend nothing and save something.
         event.preventDefault();
@@ -986,7 +1020,10 @@
     if (normalSpeed >= 0) return;
 
     const impact = -normalSpeed;
-    const restitution = pin.gold ? 0.7 : 0.59;
+    // The deck's whole job is this number: a heavy ball barely answers the pin,
+    // a bouncy one answers with interest. Clamped so a bouncy ball cannot gain
+    // energy off a pin and rocket around until the solver gives up.
+    const restitution = Math.min(0.95, (pin.gold ? 0.7 : 0.59) * (ball.rest || 1));
     const impulse = -(1 + restitution) * normalSpeed;
 
     ball.vx += nx * impulse;
@@ -1217,8 +1254,7 @@
 
     const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
     const chainMultiplier = Math.min(5, 1 + Math.floor(ball.chainHits / chainStep));
-    const luckyMultiplier = ball.gold ? 2 : 1;
-    const multiplier = chainMultiplier * luckyMultiplier;
+    const multiplier = chainMultiplier;
     let points = slot.value * multiplier * bonuses.scoreMult;
     if (slot.bonus) points *= bonuses.bonusSlotScoreMult;
     points = Math.max(1, Math.round(points));
@@ -1238,7 +1274,7 @@
       slot.center,
       SLOT_TOP - 48 - Math.random() * 5,
       `+${formatScore(points)}`,
-      ball.gold ? C.gold : slot.color,
+      ballLook(ball).aura ? `rgb(${ballLook(ball).aura})` : slot.color,
       slot.jackpot ? 30 : 23,
       1.45
     );
@@ -1248,7 +1284,7 @@
     // type scaled with the board on a phone.
     const notes = [];
     if (multiplier > 1) {
-      notes.push(`×${multiplier}${ball.gold ? " LUCKY" : " CHAIN"}`);
+      notes.push(`×${multiplier} CHAIN`);
     }
     if (slot.bonus) {
       const extra = slot.bonus + bonuses.bonusBallExtra;
@@ -1259,7 +1295,7 @@
         slot.center,
         SLOT_TOP - 22,
         notes.join(" · "),
-        multiplier >= 6 || ball.gold ? C.gold : C.violet,
+        multiplier >= 6 ? C.gold : C.violet,
         notes.length > 1 ? 13 : 14,
         1.3
       );
@@ -1310,6 +1346,16 @@
       state.flash = Math.max(state.flash, 0.06);
       state.flashColor = slot.color;
       sfxPocket(slot.value);
+    }
+
+    // An encore ball gets one more go: unless it just found the jackpot, it
+    // comes back to the chute and drops again, free, once.
+    if (ball.type === "encore" && !slot.jackpot && !ball.encoreUsed) {
+      ball.encoreUsed = true;
+      const echo = makeBall(clamp(ball.x, PLAY.left + 30, PLAY.right - 30), "encore");
+      echo.encoreUsed = true;
+      state.activeBalls.push(echo);
+      addFloatingText(slot.center, SLOT_TOP - 112, "ENCORE · ONE MORE", C.gold, 16, 1.7);
     }
 
     if (plunging) {
@@ -1388,6 +1434,98 @@
     }
     if (slot) flyTokenToHud(slot);
     showGameToast(`POT · ${state.pot} TOKEN${state.pot === 1 ? "" : "S"}`);
+  }
+
+  function buildDeck() {
+    if (!ui.deckRow) return;
+    ui.deckRow.textContent = "";
+    deckChips.clear();
+
+    for (const type of DECK_ORDER) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "deck-chip";
+      chip.dataset.ball = type;
+
+      const name = document.createElement("span");
+      name.className = "deck-name";
+      name.textContent = BALL_TYPES[type].label;
+
+      const count = document.createElement("strong");
+      count.className = "deck-count";
+      count.textContent = "0";
+
+      chip.append(name, count);
+      chip.addEventListener("click", () => {
+        armBall(type);
+        chip.blur();
+      });
+
+      ui.deckRow.appendChild(chip);
+      deckChips.set(type, chip);
+    }
+
+    updateDeckUi(0, true);
+  }
+
+  function updateDeckUi(untilCharge = 0, hasBalls = state.ballsLeft > 0) {
+    for (const [type, chip] of deckChips) {
+      const count = state.deck[type] || 0;
+      const isArmed = state.armed === type;
+      chip.classList.toggle("armed", isArmed);
+      chip.classList.toggle("spent", count <= 0);
+      chip.disabled = count <= 0 || !hasBalls;
+      chip.setAttribute("aria-pressed", String(isArmed));
+      chip.setAttribute(
+        "aria-label",
+        `${BALL_TYPES[type].label} ball, ${count} left${isArmed ? ", armed for the next drop" : ""}`
+      );
+      const countEl = chip.querySelector(".deck-count");
+      if (countEl) setText(countEl, String(count), false);
+    }
+
+    if (ui.deckCharge) {
+      setText(
+        ui.deckCharge,
+        hasBalls
+          ? `CHARGE IN ${untilCharge} DROP${untilCharge === 1 ? "" : "S"}`
+          : "NO DROPS LEFT",
+        false
+      );
+    }
+  }
+
+  function armBall(type) {
+    if ((state.deck[type] || 0) <= 0) {
+      showGameToast(`NO ${BALL_TYPES[type].label} BALLS LEFT`);
+      return;
+    }
+
+    state.armed = state.armed === type ? null : type;
+    updateDeckUi();
+    ensureAudio();
+    sfxDeckArm();
+    ui.announcer.textContent = state.armed
+      ? `${BALL_TYPES[type].label} ball armed. It drops next.`
+      : "Ball disarmed. The next drop is a standard ball.";
+  }
+
+  // Every charge-interval drop hands over one random ball instead of the old
+  // silent gold ball, so the interval still pays and it feeds the deck.
+  function grantDeckCharge() {
+    const type = DECK_ORDER[Math.floor(Math.random() * DECK_ORDER.length)];
+    state.deck[type] = Math.min(DECK_MAX, (state.deck[type] || 0) + 1);
+    updateDeckUi();
+
+    const chip = deckChips.get(type);
+    if (chip) {
+      chip.classList.remove("chip-gain");
+      void chip.offsetWidth;
+      chip.classList.add("chip-gain");
+    }
+
+    showGameToast(`+1 ${BALL_TYPES[type].label} BALL`);
+    haptic(12);
   }
 
   function updatePotUi() {
@@ -1544,29 +1682,18 @@
     if (state.heat >= HEAT_MAX) igniteBoard();
   }
 
-  function dropBall() {
-    if (window.NovaWheel && window.NovaWheel.isOpen()) return;
-    if (state.status === "over" || state.status === "ending" || state.status === "overflow") return;
-    if (state.ballsLeft <= 0) return;
-
-    const now = performance.now();
-    if (now - state.lastDropAt < 105) return;
-    state.lastDropAt = now;
-
-    const nextDropNumber = state.dropCount + 1;
-    const luckyEvery = Math.max(2, Math.floor(bonuses.luckyEvery) || 5);
-    const gold = nextDropNumber % luckyEvery === 0;
-    const margin = BALL_R + 12;
-    const spawnX = clamp(state.aimX, PLAY.left + margin, PLAY.right - margin);
-    const spawnY = PLAY.top + 27;
-
-    const ball = {
+  // One place builds a ball, so the drop path and the encore re-drop cannot
+  // drift apart.
+  function makeBall(spawnX, type) {
+    const spec = BALL_TYPES[type] || BALL_TYPES.standard;
+    return {
       x: spawnX,
-      y: spawnY,
+      y: PLAY.top + 27,
       vx: (Math.random() - 0.5) * 28,
       vy: 26,
-      r: BALL_R,
-      gold,
+      r: BALL_R * spec.scale,
+      type,
+      rest: spec.rest,
       voice: Math.floor(Math.random() * 3),
       age: 0,
       slowTime: 0,
@@ -1578,6 +1705,35 @@
       hitPegs: new Set(),
       trail: []
     };
+  }
+
+  function dropBall() {
+    if (window.NovaWheel && window.NovaWheel.isOpen()) return;
+    if (state.status === "over" || state.status === "ending" || state.status === "overflow") return;
+    if (state.ballsLeft <= 0) return;
+
+    const now = performance.now();
+    if (now - state.lastDropAt < 105) return;
+    state.lastDropAt = now;
+
+    const nextDropNumber = state.dropCount + 1;
+    const luckyEvery = Math.max(2, Math.floor(bonuses.luckyEvery) || 5);
+    const grantsCharge = nextDropNumber % luckyEvery === 0;
+
+    // The deck is the only special ball now, so whatever is armed drops and the
+    // charge is spent on that drop whether it lands well or not.
+    const type = state.armed && (state.deck[state.armed] || 0) > 0 ? state.armed : "standard";
+    const spec = BALL_TYPES[type];
+    const radius = BALL_R * spec.scale;
+    const margin = radius + 12;
+    const spawnX = clamp(state.aimX, PLAY.left + margin, PLAY.right - margin);
+    const ball = makeBall(spawnX, type);
+
+    if (type !== "standard") {
+      state.deck[type] = Math.max(0, (state.deck[type] || 0) - 1);
+      state.armed = null;
+      updateDeckUi();
+    }
 
     state.ballsLeft--;
     state.dropCount++;
@@ -1587,11 +1743,14 @@
 
     bumpElement(ui.balls.parentElement, "bump", 300);
     ensureAudio();
-    sfxDrop(gold);
+    sfxDrop(type !== "standard");
 
-    if (gold) {
-      spawnSparks(spawnX, spawnY, C.gold, 12, 1.15);
+    if (type !== "standard") {
+      const look = ballLook(ball);
+      spawnSparks(spawnX, ball.y, look.aura ? `rgb(${look.aura})` : C.gold, 12, 1.15);
     }
+
+    if (grantsCharge) grantDeckCharge();
 
     updateHud(true);
     if (state.auto) scheduleAutoDrop();
@@ -1843,6 +2002,8 @@
     state.hot = false;
     state.hotTimer = 0;
     state.plungeScene = false;
+    state.deck = { ...DECK_START };
+    state.armed = null;
     updatePotUi();
 
     state.status = "ready";
@@ -1945,22 +2106,9 @@
     setText(ui.chainHits, chainText, force);
 
     const luckyEvery = Math.max(2, Math.floor(bonuses.luckyEvery) || 5);
-    const untilLucky =
+    const untilCharge =
       (luckyEvery - 1 - (state.dropCount % luckyEvery) + luckyEvery) % luckyEvery;
-    const hasDrops = state.ballsLeft > 0;
-    const resolving = !hasDrops && state.activeBalls.length > 0;
-    setText(
-      ui.luckyText,
-      resolving
-        ? "IN FLIGHT"
-        : !hasDrops
-        ? "NO DROPS LEFT"
-        : untilLucky === 0
-          ? "NEXT DROP · ×2"
-          : `IN ${untilLucky} DROP${untilLucky === 1 ? "" : "S"}`,
-      force
-    );
-    ui.luckyCard.classList.toggle("is-next", hasDrops && untilLucky === 0);
+    updateDeckUi(untilCharge, state.ballsLeft > 0);
     setText(
       ui.runBallRule,
       `${STARTING_BALLS + bonuses.startingBalls} BALLS / RUN`,
@@ -2805,7 +2953,8 @@
           const t = i / trail.length;
           const alphaTrail = t * t * 0.16 * alpha;
           ctx.globalAlpha = alphaTrail;
-          ctx.fillStyle = ball.gold ? C.gold : C.cyan;
+          const trailLook = ballLook(ball);
+          ctx.fillStyle = trailLook.aura ? `rgb(${trailLook.aura})` : C.cyan;
           ctx.beginPath();
           ctx.arc(trail[i].x, trail[i].y, ball.r * (0.3 + t * 0.68), 0, Math.PI * 2);
           ctx.fill();
@@ -2817,25 +2966,44 @@
     }
   }
 
+  function ballLook(ball) {
+    const type = BALL_TYPES[ball.type] || BALL_TYPES.standard;
+    return BALL_LOOK[type.look] || BALL_LOOK.standard;
+  }
+
+  // One glow sprite per aura colour, built once. A radial gradient per ball per
+  // frame is exactly the kind of cost that showed up in the sky map.
+  const ballAuraSprites = new Map();
+
+  function ballAuraSprite(rgb) {
+    const cached = ballAuraSprites.get(rgb);
+    if (cached) return cached;
+
+    const size = 64;
+    const sprite = document.createElement("canvas");
+    sprite.width = size;
+    sprite.height = size;
+    const paint = sprite.getContext("2d");
+    const gradient = paint.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, `rgba(${rgb}, 0.5)`);
+    gradient.addColorStop(0.45, `rgba(${rgb}, 0.14)`);
+    gradient.addColorStop(1, `rgba(${rgb}, 0)`);
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, size, size);
+
+    ballAuraSprites.set(rgb, sprite);
+    return sprite;
+  }
+
   function drawBall(ball, alpha, captured) {
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    if (ball.gold) {
-      const aura = ctx.createRadialGradient(
-        ball.x,
-        ball.y,
-        ball.r * 0.4,
-        ball.x,
-        ball.y,
-        ball.r * 2.8
-      );
-      aura.addColorStop(0, "rgba(255, 204, 104, 0.24)");
-      aura.addColorStop(1, "rgba(255, 183, 65, 0)");
-      ctx.fillStyle = aura;
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, ball.r * 2.8, 0, Math.PI * 2);
-      ctx.fill();
+    const look = ballLook(ball);
+
+    if (look.aura) {
+      const reach = ball.r * 2.9;
+      ctx.drawImage(ballAuraSprite(look.aura), ball.x - reach, ball.y - reach, reach * 2, reach * 2);
     }
 
     // No canvas shadow here: a per-ball shadowBlur is a blur pass per ball per
@@ -2849,17 +3017,10 @@
       ball.r * 1.15
     );
 
-    if (ball.gold) {
-      body.addColorStop(0, "#fffef1");
-      body.addColorStop(0.3, "#ffe3a0");
-      body.addColorStop(0.7, "#d99128");
-      body.addColorStop(1, "#7b4111");
-    } else {
-      body.addColorStop(0, "#ffffff");
-      body.addColorStop(0.3, "#e6fffb");
-      body.addColorStop(0.7, "#a3f5e8");
-      body.addColorStop(1, "#398e91");
-    }
+    body.addColorStop(0, look.stops[0]);
+    body.addColorStop(0.3, look.stops[1]);
+    body.addColorStop(0.7, look.stops[2]);
+    body.addColorStop(1, look.stops[3]);
 
     ctx.fillStyle = body;
     ctx.beginPath();
@@ -2867,9 +3028,7 @@
     ctx.fill();
 
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = ball.gold
-      ? "rgba(255, 242, 194, 0.72)"
-      : "rgba(217, 255, 250, 0.64)";
+    ctx.strokeStyle = look.ring;
     ctx.lineWidth = 0.9;
     ctx.stroke();
 
@@ -2883,7 +3042,7 @@
       const mult = Math.min(5, 1 + Math.floor(ball.chainHits / chainStep));
       if (mult > 1) {
         ctx.globalAlpha = alpha * 0.28;
-        ctx.strokeStyle = ball.gold ? C.gold : C.cyan;
+        ctx.strokeStyle = look.aura ? `rgb(${look.aura})` : C.cyan;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.r + 3 + (mult - 1) * 1.2, 0, Math.PI * 2);
@@ -3109,7 +3268,14 @@
     for (const ball of state.activeBalls) {
       const speed = Math.hypot(ball.vx, ball.vy);
       const halo = clamp(0.16 + speed / 2300, 0.16, 0.52) * ball.alpha;
-      lightGlow(ball.x, ball.y, 58, 58, ball.gold ? C.gold : C.cyan, halo);
+      lightGlow(
+        ball.x,
+        ball.y,
+        58,
+        58,
+        ballLook(ball).aura ? `rgb(${ballLook(ball).aura})` : C.cyan,
+        halo
+      );
     }
 
     for (const pin of pins) {
@@ -4078,6 +4244,11 @@
     } else {
       tone(180, 0.08, "sine", 0.025, 260);
     }
+  }
+
+  // Picking a ball: a short, dry tick that says "this one is in hand".
+  function sfxDeckArm() {
+    tone(660, 0.06, "triangle", 0.02, 880, 0, 0, 0.1);
   }
 
   function sfxPocket(value) {
