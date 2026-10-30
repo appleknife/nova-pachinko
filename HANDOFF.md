@@ -33,6 +33,7 @@ and HUD, `wheel.css` for the vault UI).
 - **Pot / Nova Overflow**: jackpots mint into a pot; BANK anytime (button or `B`); run end offers PLUNGE (one machine-aimed ball, pot doubles on jackpot, pays out safe on a miss, 3 per run) with a deeper cinema and a 3-beat score.
 - **Ball deck**: heavy / bouncy / tiny / encore, one-shot per manual drop, sticks under SWEEP, `AUTO PICK` toggle lets a sweep spend the deck, charge every 5th drop (relic-modifiable). `1-4` arm.
 - **Wheel**: 8 branches x 5 rarities x 2 items, pity on the 10th non-Epic+ spin, shards from duplicates, forge any locked item for 10 shards of its rarity, legendary trades up 5:1 into mythic shards, 40 pairs paying 3 shards each.
+- **Batch spins**: `SPIN ×5` and `SPIN ALL` (the latter disabled below ten tokens; its badge is the live wallet, so the button always states its price). A batch buys every draw up front, spends one ~900 ms wheel animation on the whole lot, lands on the rarest pull of the batch, and leaves a receipt tagging `NEW` / `×count` / `PAIR`. The receipt groups by item (so the tag is the batch quantity, not the collection count that used to tick `×4`, `×5` down the list), sorts rarest first, and scrolls inside a 216 px frame so every draw is listed. The count line sits in its own `.batch-head` above the scroll area, so the totals stay put while the rows move. The pipeline is split so the two paths cannot diverge: `drawPrize()` pays and rolls, `applyDraw()` mutates the save and returns the result, `presentResult()` owns the card and counters. `spinBatch()` applies its draws at purchase time (a reload mid-animation must not eat paid tokens) and `revealBatch()` only presents.
 - **Vault**: grid + sky (eight hand-drawn constellations), branch filter + rarity filter (composing), shard strip, showcase pinning.
 - **Sharing**: passport PNG (collection), run card PNG from the report (`SHARE RUN`).
 - **Meta**: relics (one per completed branch), mastery, Dust, Epic+ Spark, volume slider, quality cycling, SWEEP, desktop app.
@@ -52,6 +53,16 @@ note was written.
 
 ## Testing harnesses (scratchpad `C:\Users\kopik\.lmstudio\scratchpads\dx\`)
 
+**The `dx` scratchpad is gone** (only a stray `dx$p` Chrome profile survives), so
+`inject.ps1`, `inline2.ps1`, `stress2.ps1`, `listen.ps1` and `restart-nova.ps1`
+all need rebuilding. A minimal replacement used for the batch work: copy the
+five source files into a folder, append `seed.js` (clears localStorage, writes a
+token count, installs an error collector) and `probe.js` (drives the DOM, beacons
+results to `http://127.0.0.1:8099/`), with a PowerShell `HttpListener` in front
+of it and `--headless=new` Chrome. Use `--virtual-time-budget` only for logic
+that a click can force through `skipSpin()`; it freezes the real animation loop,
+so motion tests need the beacon and real time.
+
 - `inject.ps1` copies the game into a folder and injects a harness. **Its `-Extra` parameter works** (a PowerShell case-insensitivity bug used to swallow it — fixed).
 - `inline2.ps1` inlines both scripts into one page so uncaught errors are reported with real line numbers instead of `Script error.`
 - `stress2.ps1` + `listen.ps1`: the only way to test the **real** animation loop. The page beacons its results to `http://127.0.0.1:8099/`; run `listen.ps1` first, then launch Chrome **without** `--virtual-time-budget`.
@@ -66,6 +77,7 @@ note was written.
 ## Traps that have already bitten
 
 - **Temporal dead zone**: `const` tables (`BALL_TYPES`, `deckChips`, `sky`) must be declared **before** the init sequence that uses them. This has broken the build three times.
+- **The phone wheel layout is ordered by CSS `order:`, not by DOM order.** Wrapping `#spinFiveBtn` in a `.batch-buttons` div put the row above the intro and reversed the two buttons, because the wrapper had no `order` and the children kept theirs. Any new wrapper needs its own order value plus `order: 0` on the children that already had one.
 - **`TAU` only exists in `wheel.js`.** In `game.js` use `Math.PI * 2`.
 - **A canvas is a replaced element**: `left/right/bottom` will not stretch it. Set explicit `width`/`height`.
 - **Never resize a canvas inside its own ResizeObserver callback** — defer a frame.

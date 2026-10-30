@@ -548,6 +548,8 @@
     wheelHit: document.getElementById("wheelHit"),
     skipSpin: document.getElementById("skipSpin"),
     spinFiveBtn: document.getElementById("spinFiveBtn"),
+    spinAllBtn: document.getElementById("spinAllBtn"),
+    spinAllCost: document.getElementById("spinAllCost"),
     batchList: document.getElementById("batchList"),
     spinCost: document.getElementById("spinCost"),
     wheelStatus: document.getElementById("wheelStatus"),
@@ -897,7 +899,7 @@
 
   // Called *after* an item is granted, with the pair state captured before it:
   // a pair pays once, on the pull that completes it, and never again on reload.
-  function celebratePair(branchId, rarityId, delay = 0) {
+  function celebratePair(branchId, rarityId, delay = 0, quiet = false) {
     const rarity = rarityById.get(rarityId);
     const branch = branchById.get(branchId);
     if (!rarity || !branch) return;
@@ -905,6 +907,9 @@
     wheel.shards[rarityId] = (wheel.shards[rarityId] || 0) + PAIR_SHARD_BONUS;
     saveShards();
     updateShardStrip();
+
+    // A batch pays quietly and reports the pairs in its receipt instead.
+    if (quiet) return;
 
     const announce = () => {
       showToast(
@@ -2811,6 +2816,9 @@
     }
     el.skipSpin.addEventListener("click", skipSpin);
     el.spinFiveBtn.addEventListener("click", () => spinBatch(5));
+    // Read the wallet at click time, not at bind time: the whole point of the
+    // button is that it spends whatever is in there when you press it.
+    el.spinAllBtn.addEventListener("click", () => spinBatch(tokens));
     el.sparkBtn.addEventListener("click", armSpark);
 
     if (el.viewGrid) el.viewGrid.addEventListener("click", () => setVaultView("grid"));
@@ -3130,6 +3138,13 @@
 
     el.spinBtn.disabled = !canSpin;
     el.spinFiveBtn.disabled = busy || tokens < 5;
+    el.spinAllBtn.disabled = busy || tokens < 10;
+    // The badge is the price, and the price is the whole wallet.
+    el.spinAllCost.textContent = `✦ ${tokens}`;
+    el.spinAllBtn.title =
+      tokens >= 10
+        ? `Spend all ${tokens} tokens on ${tokens} draws, one wheel spin`
+        : `Needs ten tokens — now ${tokens}`;
     // Skip only exists while there is something to skip: a spin in flight, or
     // the rarity ladder flickering towards its result.
     el.skipSpin.hidden = !busy;
@@ -3142,7 +3157,7 @@
 
     if (busy) {
       el.spinBtnLabel.textContent = wheel.batch
-        ? `${wheel.batch.left} LEFT…`
+        ? `${wheel.batch.draws.length} DRAWS…`
         : wheel.spinning
           ? "SPINNING…"
           : "READING FATE…";
@@ -3342,16 +3357,10 @@
     }
   }
 
-  function spinWheel() {
-    if (!wheel.open || wheel.busy) return;
-
-    if (tokens < 1) {
-      showToast("NO TOKENS · LAND A PACHINKO JACKPOT", "");
-      return;
-    }
-
-    if (wheel.tab !== "wheel") setTab("wheel", true);
-
+  // Pays for one draw and rolls it. Tokens, the spin counter, pity and Spark
+  // are all settled here, so a batch can buy several draws up front and know
+  // which of them the wheel should point at before it starts moving.
+  function drawPrize() {
     tokens -= 1;
     saveNumber(STORAGE.tokens, tokens);
     wheel.spins += 1;
@@ -3369,21 +3378,27 @@
     const pool = branch.items[rarity.id];
     const item = pool[Math.floor(Math.random() * pool.length)];
 
-    wheel.pending = { branch, rarity, item };
-    wheel.targetIndex = targetIndex;
+    return { branch, rarity, item, targetIndex };
+  }
+
+  // Turns the disc toward a draw and hands the frame loop the job of landing it.
+  // A single spin gets the full 4s of theatre; a batch gets one short spin that
+  // aims at its best draw instead of replaying the ceremony per token.
+  function startSpin(draw, duration) {
+    wheel.pending = draw;
+    wheel.targetIndex = draw.targetIndex;
     wheel.selectedIndex = -1;
     wheel.busy = true;
     wheel.spinning = true;
     wheel.spinStart = performance.now();
-    // A batch would be tedious at full length, so those spins run short.
-    wheel.spinDuration = wheel.batch ? 460 : REDUCED_MOTION ? 1250 : 4050 + Math.random() * 900;
+    wheel.spinDuration = duration;
     wheel.spinFrom = wheel.angle;
     wheel.lastTick = -1;
     wheel.lastTickAt = 0;
     wheel.tension = false;
 
     const segment = TAU / BRANCHES.length;
-    const targetCenter = -(targetIndex + 0.5) * segment;
+    const targetCenter = -(draw.targetIndex + 0.5) * segment;
     const jitter = (Math.random() - 0.5) * segment * 0.56;
     const finalAngle = targetCenter + jitter;
     let delta = normalizeAngle(finalAngle) - normalizeAngle(wheel.angle);
@@ -3395,21 +3410,42 @@
       delta;
 
     el.rewardCard.className = "reward-card rolling";
-    el.rewardCard.style.setProperty("--branch-rgb", branch.rgb);
+    el.rewardCard.style.setProperty("--branch-rgb", draw.branch.rgb);
     el.rewardCard.style.setProperty("--rarity-rgb", "146, 153, 183");
     el.rewardBranch.textContent = "NOVA WHEEL";
     el.rewardRarity.textContent = "SPINNING";
     el.rewardSymbol.textContent = "✦";
     el.rewardName.textContent = "READING THE FATES";
-    el.rewardDesc.textContent =
-      "The wheel chooses the branch. The vault chooses the rarity.";
-    el.rewardBadge.textContent = `${countFoundItems()} / ${TOTAL_ITEMS} COLLECTED`;
+    el.rewardDesc.textContent = wheel.batch
+      ? `${wheel.batch.draws.length} draws are in the air. The rarest one takes the card.`
+      : "The wheel chooses the branch. The vault chooses the rarity.";
+    // A batch has already been added to the collection by now, and showing the
+    // new total on the badge before the reveal would give the result away.
+    if (!wheel.batch) {
+      el.rewardBadge.textContent = `${countFoundItems()} / ${TOTAL_ITEMS} COLLECTED`;
+    }
 
-    el.wheelStatus.textContent = "The wheel is moving. Fate is listening.";
+    el.wheelStatus.textContent = wheel.batch
+      ? `${wheel.batch.draws.length} draws riding on one spin.`
+      : "The wheel is moving. Fate is listening.";
     highlightRarity(null);
     updateWalletUi();
-    updatePityUi();
+    // Pity moved when the batch was bought; the meter catches up at the reveal.
+    if (!wheel.batch) updatePityUi();
     dispatchSfx("wheel-start");
+  }
+
+  function spinWheel() {
+    if (!wheel.open || wheel.busy) return;
+
+    if (tokens < 1) {
+      showToast("NO TOKENS · LAND A PACHINKO JACKPOT", "");
+      return;
+    }
+
+    if (wheel.tab !== "wheel") setTab("wheel", true);
+
+    startSpin(drawPrize(), REDUCED_MOTION ? 1250 : 4050 + Math.random() * 900);
   }
 
   function rollRarity(forceGuaranteed) {
@@ -3489,20 +3525,49 @@
     requestAnimationFrame(wheelLoop);
   }
 
-  // Five tokens, five draws, one receipt. Each spin still runs the real
-  // pipeline (tokens, pity, collection, mastery, Dust) — the batch only changes
-  // how long you wait between them.
+  // N tokens, N real draws, one wheel spin and one receipt. The batch buys
+  // every draw up front (so pity, Spark and the wallet are settled before the
+  // disc moves) and then spends a single short animation on the whole lot. It
+  // skips waiting, never draws, and never information.
   function spinBatch(count) {
     if (!wheel.open || wheel.busy) return;
     if (tokens < count) {
       showToast(`NEED ${count} TOKENS · LAND A PACHINKO JACKPOT`, "");
       return;
     }
+    if (wheel.tab !== "wheel") setTab("wheel", true);
+
     showBatchList(null);
-    wheel.batch = { total: count, left: count, results: [] };
-    spinWheel();
+
+    const draws = [];
+    for (let i = 0; i < count; i += 1) draws.push(drawPrize());
+
+    // The prizes are granted now rather than at the reveal: the tokens are
+    // already spent, so a reload in the second the disc is moving must not
+    // cost the player a batch they paid for. Nothing on screen reads the
+    // collection until the receipt is drawn, so this stays invisible.
+    const results = draws.map((draw) => applyDraw(draw));
+    for (const result of results) {
+      if (result.pairDone) {
+        celebratePair(result.item.branchId, result.item.rarityId, 0, true);
+      }
+    }
+
+    // The card shows the best of the batch, so the wheel lands on it too.
+    let anchor = draws[0];
+    for (const draw of draws) {
+      if (draw.rarity.rank >= anchor.rarity.rank) anchor = draw;
+    }
+
+    wheel.batch = { draws, results };
+    startSpin(anchor, REDUCED_MOTION ? 120 : 900);
   }
 
+  // The receipt a batch leaves behind: everything it gave you, grouped per item.
+  // Grouping is the point — "three Nova Bells" is what a player wants to know,
+  // and the running collection count ticking ×4, ×5 down the list is noise.
+  // Rarest first, matching the run card, and the list scrolls instead of
+  // stopping short of what actually dropped.
   function showBatchList(results) {
     const list = el.batchList;
     if (!list) return;
@@ -3512,26 +3577,70 @@
       return;
     }
 
+    const groups = new Map();
     for (const result of results) {
+      const seen = groups.get(result.item.id);
+      if (seen) {
+        seen.got += 1;
+        seen.pairDone = seen.pairDone || result.pairDone;
+      } else {
+        groups.set(result.item.id, {
+          branch: result.branch,
+          rarity: result.rarity,
+          item: result.item,
+          isNew: result.isNew,
+          pairDone: result.pairDone,
+          got: 1
+        });
+      }
+    }
+
+    const rows = Array.from(groups.values()).sort(
+      (a, b) => b.rarity.rank - a.rarity.rank
+    );
+    const newCount = results.filter((result) => result.isNew).length;
+    const pairCount = results.filter((result) => result.pairDone).length;
+
+    const head = document.createElement("p");
+    head.className = "batch-head";
+    head.setAttribute("role", "status");
+    const bits = [`${results.length} DRAW${results.length === 1 ? "" : "S"}`];
+    if (newCount) bits.push(`${newCount} NEW`);
+    if (pairCount) bits.push(`${pairCount} PAIR${pairCount === 1 ? "" : "S"}`);
+    head.textContent = bits.join(" · ");
+
+    const body = document.createElement("div");
+    body.className = "batch-rows";
+
+    for (const group of rows) {
       const row = document.createElement("div");
       row.className = "batch-row";
 
       const rarity = document.createElement("span");
       rarity.className = "batch-rarity";
-      rarity.style.color = `rgb(${result.rarity.rgb})`;
-      rarity.textContent = result.rarity.short;
+      rarity.style.color = `rgb(${group.rarity.rgb})`;
+      rarity.textContent = group.rarity.short;
 
       const name = document.createElement("strong");
-      name.textContent = result.item.name;
+      name.textContent = group.item.name;
 
       const tag = document.createElement("em");
-      tag.className = result.isNew ? "is-new" : "is-dup";
-      tag.textContent = result.isNew ? "NEW" : `×${result.count}`;
+      const parts = [];
+      // NEW and the quantity are alternatives for a single copy: "NEW ×1"
+      // says nothing the word NEW did not already say.
+      if (group.isNew) parts.push("NEW");
+      if (group.got > 1) parts.push(`×${group.got}`);
+      else if (!group.isNew) parts.push("×1");
+      if (group.pairDone) parts.push("PAIR");
+      tag.textContent = parts.join(" · ");
+      tag.className = group.isNew ? "is-new" : "is-dup";
+      if (group.pairDone) tag.classList.add("is-pair");
 
       row.append(rarity, name, tag);
-      list.appendChild(row);
+      body.appendChild(row);
     }
 
+    list.append(head, body);
     list.hidden = false;
     list.classList.remove("pop");
     void list.offsetWidth;
@@ -3564,7 +3673,9 @@
     wheel.flash = 0.75;
     wheel.flashRgb = wheel.pending.branch.rgb;
 
-    el.wheelStatus.textContent = `${wheel.pending.branch.name} branch locked. Reading the rarity…`;
+    el.wheelStatus.textContent = wheel.batch
+      ? `${wheel.batch.draws.length} draws landed. Counting the take…`
+      : `${wheel.pending.branch.name} branch locked. Reading the rarity…`;
     el.rewardCard.className = "reward-card rolling";
     el.rewardCard.style.setProperty("--branch-rgb", wheel.pending.branch.rgb);
     el.rewardBranch.textContent = wheel.pending.branch.name.toUpperCase();
@@ -3577,7 +3688,7 @@
     dispatchSfx("wheel-land", { index: wheel.targetIndex });
 
     window.clearInterval(wheel.rarityRollTimer);
-    if (!REDUCED_MOTION) {
+    if (!REDUCED_MOTION && !wheel.batch) {
       // The ladder flickers at the real odds rather than one fifth each, so a
       // mythic flash past stays a genuine event instead of manufactured
       // tension. Each stop also plays that tier's own preview sound.
@@ -3594,13 +3705,13 @@
     wheel.revealTimer = window.setTimeout(() => {
       wheel.revealTimer = 0;
       if (wheel.pending) revealReward();
-    }, REDUCED_MOTION ? 220 : wheel.batch ? 300 : 680);
+    }, REDUCED_MOTION ? 220 : wheel.batch ? 260 : 680);
   }
 
-  function revealReward() {
-    const pending = wheel.pending;
-    if (!pending) return;
-
+  // Everything a draw changes in the save — the collection, the Dust, the
+  // shards, the showcase — and nothing that touches the screen. A watched spin
+  // and a batch both come through here, so their payouts cannot drift apart.
+  function applyDraw(pending) {
     const { branch, rarity, item } = pending;
     const branchFoundBefore = getBranchFound(item.branchId);
     const pairWasComplete = isPairComplete(item.branchId, item.rarityId);
@@ -3627,7 +3738,7 @@
       saveStringArray(STORAGE.showcase, wheel.showcase);
     }
 
-    const result = {
+    return {
       branch,
       rarity,
       item,
@@ -3636,26 +3747,166 @@
       mastery,
       previousMastery,
       dustGain,
-      shardGain
+      shardGain,
+      // Read now, not later: a batch has to know which pull closed the pair,
+      // because by the time the receipt is drawn a dozen pulls may own both
+      // halves of it and every one of them would look like the closer.
+      pairDone: !pairWasComplete && isPairComplete(item.branchId, item.rarityId),
+      branchDone: branchFoundBefore === 9
     };
+  }
+
+  // The card, the ladder and the counters: what a player reads after a pull.
+  function presentResult(result, animate = true) {
+    el.rewardRarity.style.color = "";
+    wheel.flash = 1;
+    wheel.flashRgb = result.rarity.rgb;
+
+    renderResultCard(result, animate);
+    highlightRarity(result.rarity);
+    updateCollectionUi();
+    updateWalletUi();
+    updatePityUi();
+  }
+
+  // The run card and anything else listening for loot hears about every draw,
+  // whether it arrived on its own or as one of a batch.
+  function announceItem(result) {
+    window.dispatchEvent(
+      new CustomEvent("nova:item", {
+        detail: {
+          id: result.item.id,
+          name: result.item.name,
+          branchId: result.item.branchId,
+          rarityId: result.item.rarityId,
+          isNew: result.isNew,
+          forged: false
+        }
+      })
+    );
+  }
+
+  // One wheel animation, N draws. Every draw is applied for real — tokens,
+  // pity, Dust, shards, pairs and relics all move — but the card only holds the
+  // best pull and the receipt keeps the rest, so ten draws cost one spin's
+  // worth of waiting instead of ten.
+  function revealBatch() {
+    const batch = wheel.batch;
+    wheel.batch = null;
+    wheel.pending = null;
+    wheel.busy = false;
+
+    const results = batch.results;
+
+    let best = results[0];
+    for (const result of results) {
+      if (result.rarity.rank >= best.rarity.rank) best = result;
+    }
+
+    wheel.lastResult = best;
+    presentResult(best, true);
+
+    const found = countFoundItems();
+    const newCount = results.filter((result) => result.isNew).length;
+    const pairCount = results.filter((result) => result.pairDone).length;
+    const relicCount = results.filter((result) => result.branchDone).length;
+
+    el.wheelStatus.textContent =
+      `${results.length} draws · ${newCount} new · ${pairCount} pair${
+        pairCount === 1 ? "" : "s"
+      } · best ${best.rarity.name} ${best.item.name}`;
+
+    pulseHaptic(
+      best.rarity.rank >= 4
+        ? [0, 22, 26, 48, 34, 120]
+        : best.rarity.rank >= 3
+          ? [0, 26, 32, 58]
+          : best.rarity.rank >= 2
+            ? 26
+            : 0
+    );
+    window.dispatchEvent(
+      new CustomEvent("nova:collectionchange", { detail: getVaultSummary() })
+    );
+
+    // Pairs were paid when the batch was bought, quietly: ten pair toasts in a
+    // row would leave the last one on screen and claim the other nine never
+    // happened. The receipt tags them instead.
+    for (const result of results) {
+      if (result.branchDone) celebrateBranch(result.item.branchId);
+      announceItem(result);
+    }
+
+    if (!relicCount) {
+      if (best.rarity.rank >= 3) {
+        showToast(
+          `${best.rarity.name.toUpperCase()} · ${best.item.name}`,
+          best.rarity.rank >= 4 ? "mythic" : "gold"
+        );
+      } else if (newCount > 0) {
+        showToast(
+          `${newCount} NEW DISCOVER${newCount === 1 ? "Y" : "IES"} · ${found} / ${TOTAL_ITEMS}`,
+          "gold"
+        );
+      }
+    }
+
+    dispatchSfx("wheel-reveal", { rank: best.rarity.rank });
+    if (best.rarity.rank >= 3) {
+      if (!REDUCED_MOTION) spawnRevealBurst(best.rarity.rgb, best.rarity.rank);
+      flashRarity(best.rarity);
+    }
+
+    showBatchList(results);
+    // The receipt is the answer to "what did I get", and on a short window it
+    // lands below the buttons, so nudge it into view rather than leaving the
+    // player to discover a scrollbar.
+    el.batchList.scrollIntoView({ block: "nearest" });
+
+    window.setTimeout(() => {
+      if (!wheel.open || wheel.busy || tokens === 0) return;
+      // Leave the cursor on the batch button when there is another batch in the
+      // wallet, so a stack of tokens is a few taps rather than a chore.
+      const next = tokens >= 10 ? el.spinAllBtn : el.spinBtn;
+      next.focus({ preventScroll: true });
+    }, 100);
+  }
+
+  function revealReward() {
+    const pending = wheel.pending;
+    if (!pending) return;
+
+    // A batch reveal starts from the same landing: the disc has stopped, and
+    // the receipt takes over from the single card.
+    if (wheel.batch) {
+      revealBatch();
+      return;
+    }
+
+    const result = applyDraw(pending);
+    const {
+      rarity,
+      item,
+      count,
+      isNew,
+      mastery,
+      previousMastery,
+      dustGain,
+      shardGain,
+      pairDone,
+      branchDone
+    } = result;
 
     window.clearInterval(wheel.rarityRollTimer);
     wheel.rarityRollTimer = 0;
     window.clearTimeout(wheel.revealTimer);
     wheel.revealTimer = 0;
-    el.rewardRarity.style.color = "";
 
     wheel.lastResult = result;
     wheel.pending = null;
     wheel.busy = false;
-    wheel.flash = 1;
-    wheel.flashRgb = rarity.rgb;
 
-    renderResultCard(result, true);
-    highlightRarity(rarity);
-    updateCollectionUi();
-    updateWalletUi();
-    updatePityUi();
+    presentResult(result, true);
 
     const found = countFoundItems();
     el.wheelStatus.textContent = isNew
@@ -3676,20 +3927,6 @@
     window.dispatchEvent(
       new CustomEvent("nova:collectionchange", { detail: getVaultSummary() })
     );
-
-    if (wheel.batch) {
-      wheel.batch.results.push(result);
-      wheel.batch.left -= 1;
-      if (wheel.batch.left > 0) {
-        window.setTimeout(() => {
-          if (wheel.open) spinWheel();
-        }, 340);
-      } else {
-        const summary = wheel.batch.results.slice();
-        wheel.batch = null;
-        window.setTimeout(() => showBatchList(summary), 520);
-      }
-    }
 
     const vaultCard = vaultCards.get(item.id);
     if (vaultCard && isNew) {
@@ -3715,8 +3952,7 @@
     // A pull can finish a pair and a constellation at the same time. The relic
     // is the bigger news, so it takes the toast and the pair follows it a beat
     // later instead of being overwritten.
-    const branchDone = branchFoundBefore === 9;
-    if (!pairWasComplete && isPairComplete(item.branchId, item.rarityId)) {
+    if (pairDone) {
       celebratePair(item.branchId, item.rarityId, branchDone ? 1700 : 0);
     }
 
@@ -3729,18 +3965,7 @@
       );
     }
 
-    window.dispatchEvent(
-      new CustomEvent("nova:item", {
-        detail: {
-          id: item.id,
-          name: item.name,
-          branchId: item.branchId,
-          rarityId: item.rarityId,
-          isNew,
-          forged: false
-        }
-      })
-    );
+    announceItem(result);
 
     window.setTimeout(() => {
       if (wheel.open && !wheel.busy && tokens > 0) {
