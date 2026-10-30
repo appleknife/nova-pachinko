@@ -645,13 +645,113 @@ h1 {
   100% { transform: scale(1); }
 }
 
+.deck-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 5px;
+}
+
 .deck-charge {
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--faint);
   font-size: 7px;
   font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+/* Auto pick: the sweep spends the deck itself, for when you are watching
+   rather than steering. */
+.deck-auto {
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #6f7697;
+  background: transparent;
+  font-family: var(--ui);
+  font-size: 6.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.deck-auto:hover {
+  color: #b7bdd6;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.deck-auto.on {
+  color: #1d1305;
+  border-color: var(--gold);
+  background: var(--gold);
+}
+
+/* The run report's next-run picker. */
+.next-deck {
+  margin: 0 0 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.next-deck-head {
+  margin-bottom: 6px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8d91ac;
+  font-size: 7px;
+  font-weight: 800;
   letter-spacing: 0.16em;
-  text-align: center;
+}
+
+.next-deck-head em {
+  color: #c3c9df;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.next-deck-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.next-deck-chip {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #b9c0d8;
+  font-family: var(--ui);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.next-deck-chip[data-ball="heavy"] { color: #ffb385; }
+.next-deck-chip[data-ball="bouncy"] { color: #8affd8; }
+.next-deck-chip[data-ball="tiny"] { color: #b6e6ff; }
+.next-deck-chip[data-ball="encore"] { color: #ffd08a; }
+
+.next-deck-chip:hover {
+  border-color: rgba(255, 199, 95, 0.45);
+}
+
+.next-deck-chip.armed {
+  color: #fff0cf;
+  border-color: var(--gold);
+  background: rgba(255, 199, 95, 0.18);
+}
+
+.next-deck-chip:focus-visible {
+  outline: 2px solid rgba(255, 232, 180, 0.85);
+  outline-offset: 2px;
 }
 
 .lucky-card {
@@ -1739,9 +1839,18 @@ h1 {
     font-size: 11px;
   }
 
+  .deck-foot {
+    margin-top: 4px;
+  }
+
   .deck-charge {
-    margin: 4px 0 0;
+    margin: 0;
     font-size: 6.5px;
+  }
+
+  .deck-auto {
+    padding: 2px 5px;
+    font-size: 6px;
   }
 
   .chain-head span,

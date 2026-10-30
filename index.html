@@ -87,7 +87,11 @@
 
       <section class="deck-card" aria-label="Ball deck">
         <div id="deckRow" class="deck-row" role="group" aria-label="Choose a ball for the next drop"></div>
-        <p id="deckCharge" class="deck-charge">CHARGE IN 4 DROPS</p>
+        <div class="deck-foot">
+          <p id="deckCharge" class="deck-charge">CHARGE IN 4 DROPS</p>
+          <button id="autoPickBtn" class="deck-auto" type="button" aria-pressed="false"
+            title="Let a sweep spend the deck by itself">AUTO PICK</button>
+        </div>
       </section>
 
       <div class="token-row">
@@ -177,6 +181,14 @@
               <div class="vault-report-track"><i id="reportVaultFill"></i></div>
               <p id="reportNext">START SPINNING TO BUILD YOUR VAULT</p>
             </div>
+          </div>
+
+          <div id="nextDeck" class="next-deck" hidden>
+            <div class="next-deck-head">
+              <span>NEXT RUN</span>
+              <em id="nextDeckNote">pick a ball</em>
+            </div>
+            <div id="nextDeckRow" class="next-deck-row" role="group" aria-label="Ball armed for the next run"></div>
           </div>
 
           <div class="overlay-actions">

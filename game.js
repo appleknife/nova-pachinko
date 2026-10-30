@@ -26,6 +26,10 @@
     runBallRule: document.getElementById("runBallRule"),
     deckRow: document.getElementById("deckRow"),
     deckCharge: document.getElementById("deckCharge"),
+    autoPickBtn: document.getElementById("autoPickBtn"),
+    nextDeck: document.getElementById("nextDeck"),
+    nextDeckRow: document.getElementById("nextDeckRow"),
+    nextDeckNote: document.getElementById("nextDeckNote"),
     dropBtn: document.getElementById("dropBtn"),
     autoBtn: document.getElementById("autoBtn"),
     aimHint: document.getElementById("aimHint"),
@@ -88,6 +92,7 @@
   const DECK_START = { heavy: 2, bouncy: 2, tiny: 2, encore: 1 };
   const DECK_ORDER = ["heavy", "bouncy", "tiny", "encore"];
   const DECK_MAX = 4;
+  const AUTO_PICK_KEY = "nova-pachinko-autopick-v1";
 
   // Board heat. A lucky bumper is worth 11 heat and a plain pin about half a
   // point, so a run that keeps finding the gold studs heats up every couple of
@@ -211,6 +216,10 @@
     runLoot: [],
     deck: { ...DECK_START },
     armed: null,
+    // Armed from the run report and applied at the start of every run, so the
+    // opening ball is a standing choice rather than a per-run chore.
+    pendingArm: null,
+    autoPick: loadBoolean(AUTO_PICK_KEY, false),
     overflow: { active: false, resolved: false, hit: false, plunges: PLUNGE_BALLS },
     heat: 0,
     hot: false,
@@ -313,6 +322,7 @@
   updateQualityUi();
   updateAutoButton();
   buildDeck();
+  buildNextDeck();
   updateHud(true);
   requestAnimationFrame(frame);
 
@@ -486,6 +496,20 @@
       setAuto(!state.auto);
       ui.autoBtn.blur();
     });
+
+    if (ui.autoPickBtn) {
+      ui.autoPickBtn.addEventListener("click", () => {
+        state.autoPick = !state.autoPick;
+        saveBoolean(AUTO_PICK_KEY, state.autoPick);
+        updateDeckUi();
+        ensureAudio();
+        sfxDeckArm();
+        ui.announcer.textContent = state.autoPick
+          ? "Auto pick on. A sweep will spend the deck by itself."
+          : "Auto pick off. A sweep drops standard balls unless you arm one.";
+        ui.autoPickBtn.blur();
+      });
+    }
 
     ui.resetBtn.addEventListener("click", () => {
       resetGame();
@@ -1481,6 +1505,17 @@
     showGameToast(`POT · ${state.pot} TOKEN${state.pot === 1 ? "" : "S"}`);
   }
 
+  // What goes down the chute: a manual pick wins, then (under a sweep only) the
+  // auto-picker spends whatever is in stock, then standard.
+  function chooseBallType() {
+    if (state.armed && (state.deck[state.armed] || 0) > 0) return state.armed;
+    if (state.auto && state.autoPick) {
+      const available = DECK_ORDER.filter((type) => (state.deck[type] || 0) > 0);
+      if (available.length) return available[Math.floor(Math.random() * available.length)];
+    }
+    return "standard";
+  }
+
   function buildDeck() {
     if (!ui.deckRow) return;
     ui.deckRow.textContent = "";
@@ -1540,13 +1575,58 @@
       } else if (state.auto) {
         label = holding
           ? `SWEEP · ${BALL_TYPES[state.armed].label} BALLS`
-          : "SWEEP · STANDARD BALLS";
+          : state.autoPick
+            ? "SWEEP · AUTO PICK"
+            : "SWEEP · STANDARD BALLS";
       } else {
         label = holding
           ? `${BALL_TYPES[state.armed].label} NEXT · ${untilCharge} TO CHARGE`
           : `CHARGE IN ${untilCharge} DROP${untilCharge === 1 ? "" : "S"}`;
       }
       setText(ui.deckCharge, label, false);
+    }
+
+    if (ui.autoPickBtn) {
+      ui.autoPickBtn.classList.toggle("on", state.autoPick);
+      ui.autoPickBtn.setAttribute("aria-pressed", String(state.autoPick));
+      ui.autoPickBtn.textContent = state.autoPick ? "AUTO PICK · ON" : "AUTO PICK";
+    }
+  }
+
+  // The run report is the one moment you can plan without a ball in the air, so
+  // the deck lives there too: pick the ball that opens the next run.
+  function buildNextDeck() {
+    if (!ui.nextDeckRow) return;
+    ui.nextDeckRow.textContent = "";
+
+    for (const type of DECK_ORDER) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "next-deck-chip";
+      chip.dataset.ball = type;
+      chip.textContent = BALL_TYPES[type].label;
+      chip.title = BALL_TYPES[type].hint;
+      chip.addEventListener("click", () => {
+        state.pendingArm = state.pendingArm === type ? null : type;
+        syncNextDeck();
+      });
+      ui.nextDeckRow.appendChild(chip);
+    }
+
+    syncNextDeck();
+  }
+
+  function syncNextDeck() {
+    if (!ui.nextDeckRow) return;
+    for (const chip of ui.nextDeckRow.children) {
+      const armed = chip.dataset.ball === state.pendingArm;
+      chip.classList.toggle("armed", armed);
+      chip.setAttribute("aria-pressed", String(armed));
+    }
+    if (ui.nextDeckNote) {
+      ui.nextDeckNote.textContent = state.pendingArm
+        ? `${BALL_TYPES[state.pendingArm].label} opens the next run`
+        : "pick an opening ball";
     }
   }
 
@@ -1643,6 +1723,7 @@
     if (ui.againBtn) ui.againBtn.hidden = true;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = true;
     if (ui.shareRunBtn) ui.shareRunBtn.hidden = true;
+    if (ui.nextDeck) ui.nextDeck.hidden = true;
     if (ui.newBest) ui.newBest.classList.remove("show");
 
     ui.gameOver.classList.add("show");
@@ -1784,7 +1865,7 @@
 
     // The deck is the only special ball now, so whatever is armed drops and the
     // charge is spent on that drop whether it lands well or not.
-    const type = state.armed && (state.deck[state.armed] || 0) > 0 ? state.armed : "standard";
+    const type = chooseBallType();
     const spec = BALL_TYPES[type];
     const radius = BALL_R * spec.scale;
     const margin = radius + 12;
@@ -1969,6 +2050,8 @@
     if (ui.againBtn) ui.againBtn.hidden = false;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = false;
     if (ui.shareRunBtn) ui.shareRunBtn.hidden = false;
+    if (ui.nextDeck) ui.nextDeck.hidden = false;
+    syncNextDeck();
 
     ui.finalTitle.textContent = isNewBest
       ? "NEW HIGH SCORE"
@@ -2069,7 +2152,8 @@
     state.hotTimer = 0;
     state.plungeScene = false;
     state.deck = { ...DECK_START };
-    state.armed = null;
+    state.armed =
+      state.pendingArm && (state.deck[state.pendingArm] || 0) > 0 ? state.pendingArm : null;
     updatePotUi();
 
     state.status = "ready";
