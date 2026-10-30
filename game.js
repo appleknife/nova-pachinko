@@ -1498,14 +1498,23 @@
       if (countEl) setText(countEl, String(count), false);
     }
 
+    // The line under the deck always answers "what will the next drop be?",
+    // which matters most while a sweep is running and picks are automatic.
     if (ui.deckCharge) {
-      setText(
-        ui.deckCharge,
-        hasBalls
-          ? `CHARGE IN ${untilCharge} DROP${untilCharge === 1 ? "" : "S"}`
-          : "NO DROPS LEFT",
-        false
-      );
+      const holding = state.armed && (state.deck[state.armed] || 0) > 0;
+      let label;
+      if (!hasBalls) {
+        label = "NO DROPS LEFT";
+      } else if (state.auto) {
+        label = holding
+          ? `SWEEP · ${BALL_TYPES[state.armed].label} BALLS`
+          : "SWEEP · STANDARD BALLS";
+      } else {
+        label = holding
+          ? `${BALL_TYPES[state.armed].label} NEXT · ${untilCharge} TO CHARGE`
+          : `CHARGE IN ${untilCharge} DROP${untilCharge === 1 ? "" : "S"}`;
+      }
+      setText(ui.deckCharge, label, false);
     }
   }
 
@@ -1520,7 +1529,9 @@
     ensureAudio();
     sfxDeckArm();
     ui.announcer.textContent = state.armed
-      ? `${BALL_TYPES[type].label} ball armed. It drops next.`
+      ? state.auto
+        ? `${BALL_TYPES[type].label} ball armed for the sweep. It keeps dropping until the charges run out.`
+        : `${BALL_TYPES[type].label} ball armed. It drops next.`
       : "Ball disarmed. The next drop is a standard ball.";
   }
 
@@ -1745,7 +1756,11 @@
 
     if (type !== "standard") {
       state.deck[type] = Math.max(0, (state.deck[type] || 0) - 1);
-      state.armed = null;
+      // A manual drop is one shot: pick, drop, back to standard. A sweep is a
+      // stream, so the pick sticks until its charges run out and the rest of the
+      // sweep falls back to standard — otherwise the deck would be unusable
+      // exactly when it is most fun to use.
+      if (!state.auto || state.deck[type] <= 0) state.armed = null;
       updateDeckUi();
     }
 
