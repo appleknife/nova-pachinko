@@ -1017,8 +1017,13 @@ h1 {
 
 .actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(4, 54px);
-  gap: 9px;
+  /* Three icons on a wide screen: the FULL button is hidden there (the HUD is a
+     sidebar and has nothing to give up). Counting the hidden column squeezed
+     DROP BALL until its SPACE chip spilled into the next cell. */
+  /* 48, not 54: the HUD is 300px wide, and three 54px icons left the drop
+     button 111px — one pixel short of "DROP / BALL" plus its SPACE chip. */
+  grid-template-columns: minmax(0, 1fr) repeat(3, 48px);
+  gap: 8px;
 }
 
 .drop-btn,
@@ -1047,11 +1052,22 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  overflow: hidden;
   font-size: 12px;
   letter-spacing: 0.16em;
 }
 
+/* The label is meant to break over two lines ("DROP / BALL") — the button is
+   narrower than the phrase on purpose. What it must never do is push the SPACE
+   chip out of the button, which is what happened when the row lost a column. */
+.drop-btn > span {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.15;
+}
+
 .drop-btn kbd {
+  flex: 0 0 auto;
   padding: 4px 7px;
   border: 1px solid rgba(74, 8, 23, 0.22);
   border-radius: 6px;
