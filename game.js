@@ -755,11 +755,26 @@
     return layer;
   }
 
+  let frameErrors = 0;
+
   function frame(now) {
+    // The next frame is booked before this one runs, so no single bad frame can
+    // stop the cabinet for good. That is exactly what happened when a missing
+    // variable threw once the last ball left the board: the board froze while
+    // the UI still answered clicks.
+    requestAnimationFrame(frame);
+    try {
+      runFrame(now);
+    } catch (error) {
+      frameErrors += 1;
+      if (frameErrors <= 3) console.error("Nova Pachinko frame error:", error);
+    }
+  }
+
+  function runFrame(now) {
     if (window.NovaWheel && window.NovaWheel.isOpen()) {
       lastFrame = now;
       accumulator = 0;
-      requestAnimationFrame(frame);
       return;
     }
 
@@ -794,7 +809,6 @@
     if (slowMotion) state.slowMo = Math.max(0, state.slowMo - dt);
     updateHud(false);
     render(dt);
-    requestAnimationFrame(frame);
   }
 
   // The last ball of a run is the payoff moment, so the game leans in: the
@@ -2114,6 +2128,13 @@
       `${STARTING_BALLS + bonuses.startingBalls} BALLS / RUN`,
       force
     );
+
+    // Kept here because the button label needs to tell "still in flight" apart
+    // from "out of balls". These two used to live in the lucky-ball block; when
+    // that block became the deck they were dropped and the ternary below threw
+    // on the first frame with no balls left, which killed the whole loop.
+    const hasDrops = state.ballsLeft > 0;
+    const resolving = !hasDrops && state.activeBalls.length > 0;
 
     const canDrop =
       state.ballsLeft > 0 &&
