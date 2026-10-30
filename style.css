@@ -1389,8 +1389,8 @@ h1 {
 .corner-tag {
   position: absolute;
   bottom: 3.9%;
-  color: rgba(255, 245, 224, 0.5);
-  font-size: 8px;
+  color: rgba(255, 245, 224, 0.72);
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.22em;
   pointer-events: none;

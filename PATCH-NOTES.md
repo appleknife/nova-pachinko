@@ -72,6 +72,21 @@ than no ball at all.
 The sweep now runs between the two `+1 BALL` lanes, so it can never be over a
 losing lane. All five paying lanes still sit inside it.
 
+### Text legibility pass
+
+The cabinet's bezel labels were the last of the small type that didn't read at
+rest:
+
+- **HEAT / GOLD PINS** (the labels on the heat filament) were 7 px at 55–72% ink.
+  They are now 8.2 px and 80–88%, and they name the mechanic the whole hot-board
+  rule hangs off, so they had to read without being lit.
+- **DROP ZONE** went from 62% to 76%.
+- **PHYSICS · LIVE** and **NOVA 001**, the two corner tags, went from 8 px at 50%
+  to 9 px at 72%.
+- **DROP · BOUNCE · BANK** was invisible — it was drawn and then the nameplate was
+  painted over it. The plate is now drawn first, the lettering sits in it, and
+  both are scaled with the cabinet instead of fixed at 6 px.
+
 ### Hidden: tap the wheel to skip
 
 Tapping the wheel while it is spinning **skips the spin** — the same tap spins
@@ -110,6 +125,10 @@ for the rest.
 ---
 
 ## Under the hood (for the next session)
+
+- Board labels paint in order, and later paints cover earlier ones — the nameplate
+  was drawing over its own tagline. Anything drawn at `y` 1028–1048 belongs after
+  the plate.
 
 - Ball motion and board collisions are now one function, `integrateMotion()`,
   shared by the real simulation and by the nudge counterfactual.

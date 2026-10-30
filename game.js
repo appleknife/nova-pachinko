@@ -2747,16 +2747,18 @@
     drawDiamond(56, 41.5, 3.3);
     drawDiamond(704, 41.5, 3.3);
 
-    ctx.font = '700 6px Bahnschrift, "Trebuchet MS", sans-serif';
-    ctx.fillStyle = "rgba(255, 242, 213, 0.42)";
-    drawSpacedText("DROP  ·  BOUNCE  ·  BANK", W / 2, 1042, 2.2);
-
-    // Bottom plate.
-    roundPath(248, 1032, 264, 14, 7);
-    ctx.fillStyle = "rgba(6, 9, 18, 0.85)";
+    // Bottom plate. It is painted *before* its lettering: the tagline used to be
+    // drawn first and then covered by this fill, which is why the nameplate
+    // looked empty.
+    roundPath(248, 1028, 264, 20, 8);
+    ctx.fillStyle = "rgba(6, 9, 18, 0.9)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
     ctx.stroke();
+
+    ctx.font = `700 ${6.6 * plaqueScale}px Bahnschrift, "Trebuchet MS", sans-serif`;
+    ctx.fillStyle = "rgba(255, 242, 213, 0.66)";
+    drawSpacedText("DROP  ·  BOUNCE  ·  BANK", W / 2, 1039, 2.2 * plaqueScale);
 
     ctx.restore();
   }
@@ -2887,7 +2889,7 @@
     // this label *smaller* on a phone than it is on a desktop monitor.
     const zoneSize = 9.2 * boardTypeScale;
     ctx.font = `700 ${zoneSize}px Bahnschrift, "Trebuchet MS", sans-serif`;
-    ctx.fillStyle = "rgba(230, 214, 186, 0.62)";
+    ctx.fillStyle = "rgba(235, 222, 199, 0.76)";
     ctx.textAlign = "center";
     drawSpacedText("DROP ZONE", W / 2, 102, 2.4 * boardTypeScale);
 
@@ -3171,17 +3173,20 @@
     }
 
     const labelScale = boardTypeScale;
-    ctx.font = `800 ${7 * labelScale}px Bahnschrift, "Trebuchet MS", sans-serif`;
+    // These two sit on the bezel and were the faintest text on the cabinet: 7px
+    // at 55-72% ink. They are the label for the heat filament, which the whole
+    // hot-board rule hangs off, so they have to be readable at rest.
+    ctx.font = `800 ${8.2 * labelScale}px Bahnschrift, "Trebuchet MS", sans-serif`;
     ctx.textAlign = "right";
     ctx.fillStyle = hot
       ? hexToRgba("#ffe3a8", Math.min(1, pulse + 0.2))
-      : "rgba(198, 207, 236, 0.72)";
+      : "rgba(210, 219, 245, 0.88)";
     ctx.fillText(hot ? "HOT" : "HEAT", left - 9, y + height + 1.5);
 
     ctx.textAlign = "left";
     ctx.fillStyle = hot
       ? hexToRgba("#ffe3a8", Math.min(1, pulse + 0.2))
-      : "rgba(198, 207, 236, 0.55)";
+      : "rgba(210, 219, 245, 0.8)";
     ctx.fillText(hot ? "+1 TOKEN" : "GOLD PINS", right + 9, y + height + 1.5);
 
     // While the board is hot, the glass is lit from the top of the cabinet.
