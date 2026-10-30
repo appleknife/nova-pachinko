@@ -1017,7 +1017,7 @@ h1 {
 
 .actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 54px);
+  grid-template-columns: minmax(0, 1fr) repeat(4, 54px);
   gap: 9px;
 }
 
@@ -1979,7 +1979,7 @@ h1 {
 
   .actions {
     grid-area: actions;
-    grid-template-columns: minmax(0, 1fr) repeat(3, 42px);
+    grid-template-columns: minmax(0, 1fr) repeat(4, 42px);
     gap: 7px;
   }
 
@@ -2174,7 +2174,7 @@ h1 {
   }
 
   .actions {
-    grid-template-columns: minmax(0, 1fr) repeat(3, 36px);
+    grid-template-columns: minmax(0, 1fr) repeat(4, 36px);
     gap: 5px;
   }
 
@@ -2360,7 +2360,140 @@ h1 {
   }
 
   .corner-tag {
-    font-size: 8.5px;
-    color: rgba(255, 245, 224, 0.52);
+    font-size: 9px;
+    color: rgba(255, 245, 224, 0.72);
+  }
+}
+
+/* ── Full-screen play ───────────────────────────────────────────────────────
+   The HUD is the thing that eats a phone screen, so it goes away and the
+   cabinet takes the viewport. The controls move to your thumb instead. */
+body.play {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.play .hud {
+  display: none;
+}
+
+body.play .game-shell {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  padding: 0;
+  gap: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.play .stage {
+  align-self: center;
+  justify-self: center;
+}
+
+/* Height-driven with a width cap, never the other way round: the cabinet is
+   taller than a phone screen is wide, so in portrait it is the *width* that
+   limits it — and a width-driven box collapses when the viewport is short.
+   `100vw * 1.3947368` is the height at which the board would be exactly as wide
+   as the screen; the 96px leaves the control bar its room. */
+body.play .stage {
+  width: auto;
+  max-width: none;
+  height: min(
+    calc(100dvh - 96px),
+    calc(100vw * 1.3947368)
+  );
+  margin: 0;
+}
+
+body.play #gameCanvas {
+  border-radius: 0;
+}
+
+.play-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 240, 205, 0.16);
+  border-radius: 18px;
+  background: rgba(8, 11, 22, 0.86);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+}
+
+.play-bar[hidden] {
+  display: none;
+}
+
+.play-btn-slot {
+  min-width: 52px;
+  min-height: 48px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: #dfe3f3;
+  background: linear-gradient(160deg, rgba(34, 40, 76, 0.95), rgba(12, 16, 33, 0.98));
+  font-family: var(--ui);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: opacity 150ms ease, transform 90ms ease, border-color 150ms ease;
+}
+
+.play-btn-slot:active {
+  transform: translateY(1px);
+}
+
+.play-btn-slot.idle {
+  opacity: 0.42;
+}
+
+.play-drop {
+  min-width: 104px;
+  border-color: rgba(255, 120, 140, 0.5);
+  color: #2a0d12;
+  background: linear-gradient(180deg, #ff8f9f, #ff5f76);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+
+.play-sweep[aria-pressed="true"] {
+  border-color: rgba(77, 245, 221, 0.55);
+  color: #04110f;
+  background: linear-gradient(180deg, #7cf7e6, #33d9c4);
+}
+
+.play-exit {
+  min-width: 44px;
+  color: #9aa3c0;
+}
+
+/* On a wide screen the HUD is a sidebar, so full screen has nothing to win and
+   a bar across the bottom would only make the board smaller. */
+@media (min-width: 861px) {
+  .play-btn {
+    display: none;
+  }
+}
+
+/* On a phone the toast lives at the bottom edge, which is where the play bar is
+   — and just above it is the slot row. In play mode it goes back to the top,
+   over the marquee, where nothing is being read. */
+@media (max-width: 860px) {
+  body.play .game-toast {
+    top: max(14px, env(safe-area-inset-top, 0px));
+    bottom: auto;
   }
 }

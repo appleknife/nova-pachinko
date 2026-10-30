@@ -32,6 +32,13 @@
     autoBtn: document.getElementById("autoBtn"),
     nudgeLeftBtn: document.getElementById("nudgeLeftBtn"),
     nudgeRightBtn: document.getElementById("nudgeRightBtn"),
+    playBtn: document.getElementById("playBtn"),
+    playBar: document.getElementById("playBar"),
+    playDrop: document.getElementById("playDrop"),
+    playNudgeLeft: document.getElementById("playNudgeLeft"),
+    playNudgeRight: document.getElementById("playNudgeRight"),
+    playSweep: document.getElementById("playSweep"),
+    playExit: document.getElementById("playExit"),
     aimHint: document.getElementById("aimHint"),
     resetBtn: document.getElementById("resetBtn"),
     soundBtn: document.getElementById("soundBtn"),
@@ -70,6 +77,7 @@
   const W = 760;
   const H = 1060;
   const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const COARSE_POINTER = window.matchMedia("(pointer: coarse)").matches;
 
   const FRAME = { x: 10, y: 10, w: 740, h: 1040, r: 38 };
   const GLASS = { x: 32, y: 76, w: 696, h: 950, r: 27 };
@@ -327,6 +335,7 @@
   // the style when it actually moved.
   let appliedShake = "";
   let nudgeUiLive = null;
+  let playMode = false;
   let glassOverlayLayer = null;
   let glassBgGradient = null;
   let glassGlowGradient = null;
@@ -344,7 +353,11 @@
   // cabinet's size comes from a clamp() against the viewport and from whether
   // the side panel sits beside or above the board.
   if (window.ResizeObserver) {
-    new ResizeObserver(() => fitPresent()).observe(canvas);
+    // Deferred a frame: measuring and resizing the canvas inside the observer's
+    // own callback is how a resize loop starts (it fires again for the result).
+    new ResizeObserver(() => {
+      requestAnimationFrame(fitPresent);
+    }).observe(canvas);
   }
   updateSoundButton();
   updateVolumeUi();
@@ -470,6 +483,12 @@
         if (target instanceof Element && target.closest("button")) return;
         event.preventDefault();
         dropBall();
+      } else if (key === "escape" && playMode) {
+        event.preventDefault();
+        setPlayMode(false);
+      } else if (key === "f") {
+        event.preventDefault();
+        setPlayMode(!playMode);
       } else if (key === "arrowleft") {
         event.preventDefault();
         nudgeBoard(-1);
@@ -547,6 +566,43 @@
         ui.nudgeRightBtn.blur();
       });
     }
+
+    if (ui.playBtn) ui.playBtn.addEventListener("click", () => setPlayMode(true));
+    if (ui.playExit) {
+      ui.playExit.addEventListener("click", () => {
+        setPlayMode(false);
+        ui.playExit.blur();
+      });
+    }
+    if (ui.playDrop) {
+      ui.playDrop.addEventListener("click", () => {
+        ensureAudio();
+        dropBall();
+      });
+    }
+    if (ui.playNudgeLeft) {
+      ui.playNudgeLeft.addEventListener("click", () => {
+        ensureAudio();
+        nudgeBoard(-1);
+      });
+    }
+    if (ui.playNudgeRight) {
+      ui.playNudgeRight.addEventListener("click", () => {
+        ensureAudio();
+        nudgeBoard(1);
+      });
+    }
+    if (ui.playSweep) {
+      ui.playSweep.addEventListener("click", () => {
+        ensureAudio();
+        setAuto(!state.auto);
+      });
+    }
+
+    // Leaving fullscreen with Esc or the OS gesture has to leave the layout too.
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && playMode) setPlayMode(false, false);
+    });
 
     ui.autoBtn.addEventListener("click", () => {
       setAuto(!state.auto);
@@ -700,7 +756,10 @@
   // turning them into knocks costs the player no aim at all.
   function railSide(point) {
     if (!point) return 0;
-    const edge = BALL_R + 10;
+    // A thumb needs a much wider target than a cursor, and on a phone the
+    // outermost strip belongs to the OS back-gesture, so a coarse pointer gets
+    // a band that starts well inside the frame.
+    const edge = BALL_R + (COARSE_POINTER ? 44 : 10);
     if (point.x < PLAY.left + edge) return -1;
     if (point.x > PLAY.right - edge) return 1;
     return 0;
@@ -834,7 +893,10 @@
   function setQualityMode(mode) {
     qualityMode = clamp(mode, 0, 2);
     saveNumber(QUALITY_KEY, qualityMode);
-    quality = qualityMode === 2 ? 0.62 : 1;
+    // 0.62 of the device scale downscaled so far that thin lines started to
+    // alias into visible streaks on a phone; 0.72 still gives a third of the
+    // pixels back without that.
+    quality = qualityMode === 2 ? 0.72 : 1;
     slowFrames = 0;
     fastFrames = 0;
     fitBacking();
@@ -1770,8 +1832,49 @@
     const live = state.activeBalls.some((ball) => !ball.captured);
     if (live === nudgeUiLive) return;
     nudgeUiLive = live;
-    if (ui.nudgeLeftBtn) ui.nudgeLeftBtn.classList.toggle("idle", !live);
-    if (ui.nudgeRightBtn) ui.nudgeRightBtn.classList.toggle("idle", !live);
+    for (const button of [ui.nudgeLeftBtn, ui.nudgeRightBtn, ui.playNudgeLeft, ui.playNudgeRight]) {
+      if (button) button.classList.toggle("idle", !live);
+    }
+  }
+
+  // ---- Full-screen play ----------------------------------------------------
+  // On a phone the HUD is what eats the screen, so this hides it and gives the
+  // cabinet the viewport, with the controls on a bar under your thumb. The
+  // browser's own fullscreen is a bonus: the layout change is the part that
+  // matters, and it works even where the Fullscreen API does not.
+  function setPlayMode(on, refocus = true) {
+    const next = Boolean(on);
+    if (next === playMode) return;
+    // Only the stacked (phone) layout has a HUD worth giving up.
+    if (next && window.innerWidth > 860) return;
+    playMode = next;
+
+    document.body.classList.toggle("play", playMode);
+    if (ui.playBar) ui.playBar.hidden = !playMode;
+
+    try {
+      if (playMode) {
+        ensureAudio();
+        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch {
+      // No fullscreen here; the class is still the whole feature.
+    }
+
+    // The canvas has a new CSS size, and the backing store has to follow it.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        fitBacking();
+        if (refocus) {
+          const target = playMode ? ui.playDrop : ui.playBtn;
+          if (target) target.focus({ preventScroll: true });
+        }
+      })
+    );
   }
 
   // What goes down the chute: a manual pick wins, then (under a sweep only) the
@@ -2143,6 +2246,10 @@
     ui.autoBtn.classList.toggle("active", state.auto);
     ui.autoBtn.setAttribute("aria-pressed", String(state.auto));
     if (label) label.textContent = state.auto ? "ON" : "SWEEP";
+    if (ui.playSweep) {
+      ui.playSweep.setAttribute("aria-pressed", String(state.auto));
+      ui.playSweep.textContent = state.auto ? "SWEEP ON" : "SWEEP";
+    }
     if (ui.aimHint) {
       ui.aimHint.innerHTML = state.auto
         ? "Auto drop <span>·</span> sweeping <span>·</span> ← → nudge"

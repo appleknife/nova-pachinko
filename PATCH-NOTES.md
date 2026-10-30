@@ -87,6 +87,23 @@ rest:
   painted over it. The plate is now drawn first, the lettering sits in it, and
   both are scaled with the cabinet instead of fixed at 6 px.
 
+### New: full screen on a phone
+
+The HUD is what eats a phone screen, so **FULL** (or `F`) now hides it and gives
+the cabinet the viewport, with **DROP / SWEEP / NUDGE / ✕** on a bar under your
+thumb. The board goes from about two-thirds of the screen to nearly all of it,
+and nothing has to be scrolled to reach the slots. `Esc` or `✕` comes back.
+
+The board is already as wide as a portrait phone allows, so the gain is the
+panels leaving rather than the cabinet growing — and below 861px only, because on
+a wide screen the HUD is a sidebar with nothing to give up.
+
+### Nudging on a touch screen
+
+The rail band is nearly twice as wide for a finger, and it starts inside the
+frame: the outermost strip of a phone screen belongs to the OS back-gesture, so
+a band that began at the very edge could never be hit.
+
 ### Hidden: tap the wheel to skip
 
 Tapping the wheel while it is spinning **skips the spin** — the same tap spins
@@ -125,6 +142,13 @@ for the rest.
 ---
 
 ## Under the hood (for the next session)
+
+- Full screen is `body.play` plus `#playBar`. The stage is sized height-first
+  (`height: min(100dvh - 96px, 100vw * 1.3947368)` with `aspect-ratio`) because a
+  width-driven box collapses on a short viewport, and the canvas re-fits in a
+  double `requestAnimationFrame` after the layout change.
+- The `ResizeObserver` on the canvas now defers its work a frame; resizing inside
+  the callback re-triggered the observer and threw a loop error.
 
 - Board labels paint in order, and later paints cover earlier ones — the nameplate
   was drawing over its own tagline. Anything drawn at `y` 1028–1048 belongs after

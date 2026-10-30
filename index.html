@@ -136,6 +136,12 @@
           </svg>
           <span id="qualityLabel">AUTO</span>
         </button>
+        <button id="playBtn" class="icon-btn play-btn" type="button" aria-label="Full screen play" title="Full screen play (F)">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9V5.6A1.6 1.6 0 0 1 5.6 4H9M15 4h3.4A1.6 1.6 0 0 1 20 5.6V9M20 15v3.4a1.6 1.6 0 0 1-1.6 1.6H15M9 20H5.6A1.6 1.6 0 0 1 4 18.4V15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+          <span>FULL</span>
+        </button>
       </div>
 
       <div class="nudge-row" role="group" aria-label="Nudge the cabinet">
@@ -214,6 +220,15 @@
       <div class="corner-tag corner-tag-right" aria-hidden="true">NOVA 001</div>
     </section>
   </main>
+
+  <!-- Full-screen play: the HUD goes away and these follow your thumb. -->
+  <div id="playBar" class="play-bar" hidden>
+    <button id="playNudgeLeft" class="play-btn-slot play-nudge" type="button" aria-label="Nudge the board left">◀</button>
+    <button id="playDrop" class="play-btn-slot play-drop" type="button">DROP</button>
+    <button id="playNudgeRight" class="play-btn-slot play-nudge" type="button" aria-label="Nudge the board right">▶</button>
+    <button id="playSweep" class="play-btn-slot play-sweep" type="button" aria-pressed="false">SWEEP</button>
+    <button id="playExit" class="play-btn-slot play-exit" type="button" aria-label="Leave full screen play">✕</button>
+  </div>
 
   <section id="wheelMode" class="wheel-mode" aria-hidden="true">
     <div id="rarityFlash" class="rarity-flash" aria-hidden="true"></div>
