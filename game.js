@@ -27,9 +27,6 @@
     deckRow: document.getElementById("deckRow"),
     deckCharge: document.getElementById("deckCharge"),
     autoPickBtn: document.getElementById("autoPickBtn"),
-    nextDeck: document.getElementById("nextDeck"),
-    nextDeckRow: document.getElementById("nextDeckRow"),
-    nextDeckNote: document.getElementById("nextDeckNote"),
     dropBtn: document.getElementById("dropBtn"),
     autoBtn: document.getElementById("autoBtn"),
     aimHint: document.getElementById("aimHint"),
@@ -216,9 +213,6 @@
     runLoot: [],
     deck: { ...DECK_START },
     armed: null,
-    // Armed from the run report and applied at the start of every run, so the
-    // opening ball is a standing choice rather than a per-run chore.
-    pendingArm: null,
     autoPick: loadBoolean(AUTO_PICK_KEY, false),
     overflow: { active: false, resolved: false, hit: false, plunges: PLUNGE_BALLS },
     heat: 0,
@@ -322,7 +316,6 @@
   updateQualityUi();
   updateAutoButton();
   buildDeck();
-  buildNextDeck();
   updateHud(true);
   requestAnimationFrame(frame);
 
@@ -1593,43 +1586,6 @@
     }
   }
 
-  // The run report is the one moment you can plan without a ball in the air, so
-  // the deck lives there too: pick the ball that opens the next run.
-  function buildNextDeck() {
-    if (!ui.nextDeckRow) return;
-    ui.nextDeckRow.textContent = "";
-
-    for (const type of DECK_ORDER) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "next-deck-chip";
-      chip.dataset.ball = type;
-      chip.textContent = BALL_TYPES[type].label;
-      chip.title = BALL_TYPES[type].hint;
-      chip.addEventListener("click", () => {
-        state.pendingArm = state.pendingArm === type ? null : type;
-        syncNextDeck();
-      });
-      ui.nextDeckRow.appendChild(chip);
-    }
-
-    syncNextDeck();
-  }
-
-  function syncNextDeck() {
-    if (!ui.nextDeckRow) return;
-    for (const chip of ui.nextDeckRow.children) {
-      const armed = chip.dataset.ball === state.pendingArm;
-      chip.classList.toggle("armed", armed);
-      chip.setAttribute("aria-pressed", String(armed));
-    }
-    if (ui.nextDeckNote) {
-      ui.nextDeckNote.textContent = state.pendingArm
-        ? `${BALL_TYPES[state.pendingArm].label} opens the next run`
-        : "pick an opening ball";
-    }
-  }
-
   function armBall(type) {
     if ((state.deck[type] || 0) <= 0) {
       showGameToast(`NO ${BALL_TYPES[type].label} BALLS LEFT`);
@@ -1723,7 +1679,6 @@
     if (ui.againBtn) ui.againBtn.hidden = true;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = true;
     if (ui.shareRunBtn) ui.shareRunBtn.hidden = true;
-    if (ui.nextDeck) ui.nextDeck.hidden = true;
     if (ui.newBest) ui.newBest.classList.remove("show");
 
     ui.gameOver.classList.add("show");
@@ -2050,8 +2005,6 @@
     if (ui.againBtn) ui.againBtn.hidden = false;
     if (ui.overlayVaultBtn) ui.overlayVaultBtn.hidden = false;
     if (ui.shareRunBtn) ui.shareRunBtn.hidden = false;
-    if (ui.nextDeck) ui.nextDeck.hidden = false;
-    syncNextDeck();
 
     ui.finalTitle.textContent = isNewBest
       ? "NEW HIGH SCORE"
@@ -2152,8 +2105,7 @@
     state.hotTimer = 0;
     state.plungeScene = false;
     state.deck = { ...DECK_START };
-    state.armed =
-      state.pendingArm && (state.deck[state.pendingArm] || 0) > 0 ? state.pendingArm : null;
+    state.armed = null;
     updatePotUi();
 
     state.status = "ready";

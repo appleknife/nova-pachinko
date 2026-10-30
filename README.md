@@ -31,7 +31,6 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 
   Each also announces itself as it leaves the chute — a thud, a boing, a tick, a shimmer — so the choice is audible before it is visible. A pick is spent on that drop whatever it hits, and the deck reverts to standard afterwards, so you choose each time rather than setting a mode. **Under SWEEP the pick sticks**: whatever you arm keeps dropping until its charges run out, then the rest of the sweep falls back to standard — so you can load the deck *before* starting a sweep and watch it spend them. The line under the deck always says what the next drop will be (`SWEEP · BOUNCY BALLS`, `SWEEP · AUTO PICK`, `HEAVY NEXT`, `CHARGE IN 3 DROPS`, `NO DROPS LEFT`).
 - **AUTO PICK** (the toggle beside that line) lets a sweep spend the deck by itself: each auto drop takes a random ball from what is left, then falls back to standard. It is off by default, because the deck is a resource — turn it on when you are watching rather than steering.
-- **The run report has a NEXT RUN picker.** The deck refills every run, so the moment between runs is when the choice matters; pick a ball on the report card and it is armed for you when the next run starts, every run, until you change it.
 - **Charges.** Every fifth drop (relics can change the cadence) hands over one random ball back into the deck, instead of the old silent ×2 gold ball.
 
 **The pot, and the overflow**
