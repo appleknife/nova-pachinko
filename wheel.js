@@ -2812,7 +2812,13 @@
     // behaves like the button. On a phone this is the difference between
     // spinning and scrolling to find out where the button went.
     if (el.wheelHit) {
-      el.wheelHit.addEventListener("click", spinWheel);
+      // Once it is moving, the same tap means the same thing the SKIP pill
+      // does. Nobody reaches for a pill at the bottom of the panel when the
+      // thing they are watching is right under their finger.
+      el.wheelHit.addEventListener("click", () => {
+        if (wheel.busy) skipSpin();
+        else spinWheel();
+      });
     }
     el.skipSpin.addEventListener("click", skipSpin);
     el.spinFiveBtn.addEventListener("click", () => spinBatch(5));
@@ -3175,7 +3181,7 @@
       el.wheelHit.setAttribute(
         "aria-label",
         busy
-          ? "Wheel is spinning"
+          ? "Wheel is spinning. Activate to skip."
           : tokens > 0
             ? `Spin the wheel \u2014 ${tokens} token${tokens === 1 ? "" : "s"} left`
             : "Spin the wheel \u2014 no tokens yet, land a pachinko jackpot"

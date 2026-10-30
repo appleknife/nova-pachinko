@@ -35,6 +35,9 @@ foreach ($file in $files) {
   Copy-Item (Join-Path $root $file) (Join-Path $game $file) -Force
 }
 Copy-Item (Join-Path $root 'audio\bump.js') (Join-Path $game 'audio\bump.js') -Force
+# Optional: without it the game falls back to a synthesised heartbeat.
+$heartbeat = Join-Path $root 'audio\heartbeat.js'
+if (Test-Path $heartbeat) { Copy-Item $heartbeat (Join-Path $game 'audio\heartbeat.js') -Force }
 Copy-Item (Join-Path $here 'NovaPachinko.cmd') (Join-Path $game 'Nova Pachinko.cmd') -Force
 Copy-Item (Join-Path $here 'START-HERE.txt') (Join-Path $game 'START HERE.txt') -Force
 

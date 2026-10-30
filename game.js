@@ -28,7 +28,10 @@
     deckCharge: document.getElementById("deckCharge"),
     autoPickBtn: document.getElementById("autoPickBtn"),
     dropBtn: document.getElementById("dropBtn"),
+    skillshot: document.getElementById("skillshot"),
     autoBtn: document.getElementById("autoBtn"),
+    nudgeLeftBtn: document.getElementById("nudgeLeftBtn"),
+    nudgeRightBtn: document.getElementById("nudgeRightBtn"),
     aimHint: document.getElementById("aimHint"),
     resetBtn: document.getElementById("resetBtn"),
     soundBtn: document.getElementById("soundBtn"),
@@ -84,6 +87,23 @@
   const AUTO_DROP_KEY = "nova-pachinko-auto-v1";
   const AUTO_DROP_MS = 190;
   const AUTO_SWEEP_SECONDS = 2.3;
+
+  // A nudge is a knock on the cabinet, not a resource: it costs nothing and it
+  // never runs out. The rhythm and the lateral cap are what keep it a knock
+  // instead of a joystick — a machine has mass, and a ball can only be shoved
+  // so hard before it stops being a nudge.
+  const NUDGE_COOLDOWN = 220;
+  const NUDGE_IMPULSE = 520;
+  const NUDGE_LATERAL_MAX = 820;
+  const NUDGE_WEIGHT = { standard: 1, heavy: 0.55, bouncy: 1.15, tiny: 0.85, encore: 1 };
+  // The jolt: a short, sharp shake that rings out in about 150 ms. Amplitude
+  // stacks while you mash, so a burst of knocks looks like someone rattling the
+  // machine and a single one looks like a knock. Kept in CSS pixels because the
+  // cabinet is a composited layer; the board itself never moves.
+  const NUDGE_SHAKE_PX = 7;
+  const NUDGE_SHAKE_MAX = 2;
+  const SHAKE_FREQ = 48;
+  const SHAKE_DECAY = 11;
 
   // The deck: four one-shot balls per run, plus whatever a charge drop hands you.
   const DECK_START = { heavy: 2, bouncy: 2, tiny: 2, encore: 1 };
@@ -185,6 +205,13 @@
     floats: [],
     aimX: W / 2,
     lastDropAt: -9999,
+    // Nudging leaves three marks: when the last knock landed, how hard the
+    // cabinet is still ringing, and which way it was hit.
+    lastNudgeAt: -9999,
+    nudges: 0,
+    shake: 0,
+    shakeDir: 0,
+    shakeT: 0,
     lastPinSound: 0,
     lastBumperSound: 0,
     time: 0,
@@ -267,6 +294,9 @@
   let audioCtx = null;
   let audioBus = null;
   let noiseBuffer = null;
+  // The held score under a last-ball or plunge scene, kept so it can be cut
+  // dead when the ball lands instead of playing over the landing chord.
+  let cinemaBed = null;
   let roomBed = null;
   let roomChimeTimer = 0;
   let tensionVoice = null;
@@ -293,6 +323,10 @@
   let fastFrames = 0;
   let layerScale = 0;
   let cabinetLayer = null;
+  // The offset currently written to the canvas, so the frame loop only touches
+  // the style when it actually moved.
+  let appliedShake = "";
+  let nudgeUiLive = null;
   let glassOverlayLayer = null;
   let glassBgGradient = null;
   let glassGlowGradient = null;
@@ -302,6 +336,7 @@
   let accumulator = 0;
   let chainFillWidth = "";
   let scoreBumpTimer = 0;
+  let skillshotTimer = 0;
 
   bindEvents();
   fitBacking();
@@ -435,6 +470,12 @@
         if (target instanceof Element && target.closest("button")) return;
         event.preventDefault();
         dropBall();
+      } else if (key === "arrowleft") {
+        event.preventDefault();
+        nudgeBoard(-1);
+      } else if (key === "arrowright") {
+        event.preventDefault();
+        nudgeBoard(1);
       } else if (key === "r") {
         event.preventDefault();
         resetGame();
@@ -472,6 +513,12 @@
       if (event.pointerType === "mouse" && event.button !== 0) return;
       event.preventDefault();
       const point = boardPoint(event);
+      const side = railSide(point);
+      if (side) {
+        ensureAudio();
+        nudgeBoard(side);
+        return;
+      }
       setAimFromPoint(point);
       ensureAudio();
       dropBall();
@@ -484,6 +531,22 @@
       dropBall();
       ui.dropBtn.blur();
     });
+
+    if (ui.nudgeLeftBtn) {
+      ui.nudgeLeftBtn.addEventListener("click", () => {
+        ensureAudio();
+        nudgeBoard(-1);
+        ui.nudgeLeftBtn.blur();
+      });
+    }
+
+    if (ui.nudgeRightBtn) {
+      ui.nudgeRightBtn.addEventListener("click", () => {
+        ensureAudio();
+        nudgeBoard(1);
+        ui.nudgeRightBtn.blur();
+      });
+    }
 
     ui.autoBtn.addEventListener("click", () => {
       setAuto(!state.auto);
@@ -622,12 +685,25 @@
     });
   }
 
+  // The shake is a translate, which moves the element's box with it, so the
+  // rect below is always the rect the player is pointing at. Nothing to undo.
   function boardPoint(event) {
     const rect = canvas.getBoundingClientRect();
     return {
       x: ((event.clientX - rect.left) / rect.width) * W,
       y: ((event.clientY - rect.top) / rect.height) * H
     };
+  }
+
+  // The rails are the machine; the glass is the game. Taps out here already
+  // aimed at the wall — setAimFromPoint clamps them to the same spot — so
+  // turning them into knocks costs the player no aim at all.
+  function railSide(point) {
+    if (!point) return 0;
+    const edge = BALL_R + 10;
+    if (point.x < PLAY.left + edge) return -1;
+    if (point.x > PLAY.right - edge) return 1;
+    return 0;
   }
 
   function setAimFromPoint(point) {
@@ -669,6 +745,8 @@
   // the browser has nothing to resample: the only scaling left is the one blit
   // below, which we control.
   function fitPresent() {
+    // A shake is a translate, so it moves the rect without changing its size
+    // and the measurement below stays right while the cabinet is ringing.
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const width = Math.round((rect.width > 4 ? rect.width : W) * dpr);
@@ -680,6 +758,35 @@
     // 0.92 CSS px per board unit is the desktop board these sizes were drawn
     // for, so a smaller board scales the type up to keep the same read.
     boardTypeScale = clamp(0.92 / ((rect.width > 4 ? rect.width : W) / W), 1, 2);
+    fitSkillshot();
+  }
+
+  // The skillshot headline is set from a measurement rather than a font-relative
+  // unit: the display stack falls back to a plain sans on machines without
+  // Impact, and that font is wide enough to run off the glass. Measure at
+  // 100 px, scale to fit, done — no overflow on any font, and it fills the
+  // cabinet at every size.
+  function fitSkillshot() {
+    const word = ui.skillshot && ui.skillshot.querySelector("strong");
+    const stageWidth = canvas.clientWidth;
+    if (!word || stageWidth < 80) return;
+
+    const target = stageWidth * 0.94;
+
+    // offsetWidth, not getBoundingClientRect: the rect includes the scale the
+    // pop animation and the base transform apply, so measuring with it gives a
+    // different answer depending on when this happens to run.
+    word.style.fontSize = "100px";
+    const natural = word.offsetWidth;
+    if (!natural) return;
+
+    // Glyph metrics are not perfectly linear in font-size, so one step after the
+    // first guess lands within a pixel of the target.
+    let size = clamp((100 * target) / natural, 24, 190);
+    word.style.fontSize = `${size.toFixed(1)}px`;
+    const actual = word.offsetWidth;
+    if (actual > 0) size = clamp((size * target) / actual, 24, 190);
+    word.style.fontSize = `${size.toFixed(1)}px`;
   }
 
   function updateQualityUi() {
@@ -841,6 +948,8 @@
     updateEffects(dt * (slowMotion ? 0.55 : 1) * (1 - 0.45 * state.cinema));
     updateHeat(dt);
     updateAutoAim(dt);
+    updateShake(dt);
+    updateNudgeUi();
     if (slowMotion) state.slowMo = Math.max(0, state.slowMo - dt);
     updateHud(false);
     render(dt);
@@ -906,8 +1015,11 @@
 
     if (state.cinema > 0.32 && !state.cinemaFired) {
       state.cinemaFired = true;
+      // The final ball is scored by the recorded heartbeat alone: the low swell
+      // that used to open this scene was 65-98 Hz, which on a laptop speaker is
+      // either silence or a rattle. The plunge keeps its own composed cue.
       if (state.plungeScene) sfxPlungeTension();
-      else sfxFinalBall();
+      startCinemaBed(state.plungeScene);
       haptic(18);
     }
 
@@ -936,15 +1048,9 @@
         continue;
       }
 
-      // Gravity is per ball: a heavy one falls harder, a bouncy one floats a
-      // little longer so its ricochets have time to read.
-      ball.vy += GRAVITY * (ball.gravity || 1) * dt;
-      ball.vx *= 1 - 0.045 * dt;
-      ball.vy *= 1 - 0.018 * dt;
       if (ball.squash > 0) ball.squash = Math.max(0, ball.squash - dt * 5.5);
 
-      ball.x += ball.vx * dt;
-      ball.y += ball.vy * dt;
+      integrateMotion(ball, dt);
 
       // Sample the trail every third step: the solver runs at 240 Hz, which is
       // far more detail than a display can show, and this cuts the per-second
@@ -953,43 +1059,6 @@
       if (ball.trailPhase % 3 === 0) {
         ball.trail.push({ x: ball.x, y: ball.y });
         if (ball.trail.length > (ball.trailMax || 12)) ball.trail.shift();
-      }
-
-      const speed = Math.hypot(ball.vx, ball.vy);
-      if (speed > MAX_SPEED) {
-        const scale = MAX_SPEED / speed;
-        ball.vx *= scale;
-        ball.vy *= scale;
-      }
-
-      if (ball.x - ball.r < PLAY.left) {
-        ball.x = PLAY.left + ball.r;
-        if (ball.vx < 0) ball.vx = -ball.vx * 0.5;
-      } else if (ball.x + ball.r > PLAY.right) {
-        ball.x = PLAY.right - ball.r;
-        if (ball.vx > 0) ball.vx = -ball.vx * 0.5;
-      }
-
-      if (ball.y - ball.r < PLAY.top) {
-        ball.y = PLAY.top + ball.r;
-        if (ball.vy < 0) ball.vy = -ball.vy * 0.22;
-      }
-
-      for (let p = 0; p < pins.length; p++) {
-        resolvePin(ball, pins[p]);
-      }
-
-      for (let d = 0; d < slotDividers.length; d++) {
-        const divider = slotDividers[d];
-        resolveCapsule(
-          ball,
-          divider.x,
-          divider.y1,
-          divider.x,
-          divider.y2,
-          DIVIDER_R,
-          0.42
-        );
       }
 
       if (
@@ -1052,6 +1121,58 @@
     }
   }
 
+  // Motion and board collisions for one ball: gravity, damping, the speed
+  // ceiling, the walls, the pins and the slot dividers. No sound, no score, no
+  // state — which is what lets the nudge's counterfactual run through it too.
+  // Anything with a side effect stays in stepPhysics.
+  function integrateMotion(ball, dt) {
+    // Gravity is per ball: a heavy one falls harder, a bouncy one floats a
+    // little longer so its ricochets have time to read.
+    ball.vy += GRAVITY * (ball.gravity || 1) * dt;
+    ball.vx *= 1 - 0.045 * dt;
+    ball.vy *= 1 - 0.018 * dt;
+
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    const speed = Math.hypot(ball.vx, ball.vy);
+    if (speed > MAX_SPEED) {
+      const scale = MAX_SPEED / speed;
+      ball.vx *= scale;
+      ball.vy *= scale;
+    }
+
+    if (ball.x - ball.r < PLAY.left) {
+      ball.x = PLAY.left + ball.r;
+      if (ball.vx < 0) ball.vx = -ball.vx * 0.5;
+    } else if (ball.x + ball.r > PLAY.right) {
+      ball.x = PLAY.right - ball.r;
+      if (ball.vx > 0) ball.vx = -ball.vx * 0.5;
+    }
+
+    if (ball.y - ball.r < PLAY.top) {
+      ball.y = PLAY.top + ball.r;
+      if (ball.vy < 0) ball.vy = -ball.vy * 0.22;
+    }
+
+    for (let p = 0; p < pins.length; p++) {
+      resolvePin(ball, pins[p]);
+    }
+
+    for (let d = 0; d < slotDividers.length; d++) {
+      const divider = slotDividers[d];
+      resolveCapsule(
+        ball,
+        divider.x,
+        divider.y1,
+        divider.x,
+        divider.y2,
+        DIVIDER_R,
+        0.42
+      );
+    }
+  }
+
   function resolvePin(ball, pin) {
     const dx = ball.x - pin.x;
     const dy = ball.y - pin.y;
@@ -1091,9 +1212,14 @@
     ball.vx -= tx * tangentSpeed * tangentLoss;
     ball.vy -= ty * tangentSpeed * tangentLoss;
 
-    const jitter = 14 * (ball.jitter || 1);
-    ball.vx += (Math.random() - 0.5) * jitter;
-    ball.vy += (Math.random() - 0.5) * 4;
+    // A ghost is the nudge's counterfactual: it runs this same code to find out
+    // where the ball was already going, so it must not scatter the result with
+    // noise or light up the cabinet on the way.
+    const jitter = ball.ghost ? 0 : 14 * (ball.jitter || 1);
+    if (jitter) {
+      ball.vx += (Math.random() - 0.5) * jitter;
+      ball.vy += (Math.random() - 0.5) * 4;
+    }
 
     if (ball.type === "bouncy") ball.squash = 1;
 
@@ -1126,10 +1252,10 @@
       const len = Math.hypot(dirX, dirY) || 1;
       ball.vx = (dirX / len) * target;
       ball.vy = (dirY / len) * target;
-      pin.flash = 1;
+      if (!ball.ghost) pin.flash = 1;
 
       const kickedAt = performance.now();
-      if (impact > 60 && kickedAt - state.lastBumperSound > 55) {
+      if (!ball.ghost && impact > 60 && kickedAt - state.lastBumperSound > 55) {
         state.lastBumperSound = kickedAt;
         sfxBumper(impact, target);
         spawnSparks(pin.x, pin.y, C.gold, 9, 1.5);
@@ -1139,7 +1265,7 @@
     ball.slowTime = 0;
 
     if (impact > 26) {
-      pin.flash = Math.max(pin.flash, clamp(impact / 430, 0.18, 1));
+      if (!ball.ghost) pin.flash = Math.max(pin.flash, clamp(impact / 430, 0.18, 1));
       registerPinHit(ball, pin, impact);
     }
   }
@@ -1224,6 +1350,7 @@
   }
 
   function registerPinHit(ball, pin, impact) {
+    if (ball.ghost) return;
     const now = performance.now();
 
     if (!ball.hitPegs.has(pin.id)) {
@@ -1360,7 +1487,9 @@
     }
 
     // The last ball of a run lands in front of the whole room, so it gets its
-    // own landing, scaled by what the slot is worth.
+    // own landing, scaled by what the slot is worth. The bed is cut first, so
+    // the landing hits silence and the chord has the room to itself.
+    stopCinemaBed();
     if (state.cinema > 0.2) sfxFinalLanding(slot);
 
     let minted = 0;
@@ -1396,6 +1525,10 @@
       }
 
       haptic([0, 28, 36, 70]);
+
+      // The knock is why it is here: before the bump this ball's own path was
+      // heading somewhere else.
+      if (ball.skillshotAt) showSkillshot();
     } else if (slot.bonus) {
       state.flash = 0.08;
       state.flashColor = C.violet;
@@ -1496,6 +1629,149 @@
     }
     if (slot) flyTokenToHud(slot);
     showGameToast(`POT · ${state.pot} TOKEN${state.pot === 1 ? "" : "S"}`);
+  }
+
+  // ---- Nudging -------------------------------------------------------------
+  // Where would this ball have landed if the knock had never happened? The same
+  // motion code, on a throwaway copy, ignoring the other balls: the question is
+  // only what this ball's own path was already going to do. Capped at four
+  // seconds of flight; a ball that never reaches the rail counts as "not the
+  // jackpot", which is the honest answer for one that is stuck.
+  function predictLanding(ball) {
+    const ghost = {
+      x: ball.x,
+      y: ball.y,
+      vx: ball.vx,
+      vy: ball.vy,
+      r: ball.r,
+      rest: ball.rest,
+      gravity: ball.gravity,
+      type: ball.type,
+      // Tells resolvePin to stay silent: no flashes, no sound, no chain, no
+      // sparks, and no random jitter on the way down.
+      ghost: true
+    };
+    for (let step = 0; step < 960; step += 1) {
+      integrateMotion(ghost, STEP);
+      if (ghost.y > SLOT_TOP + 51) return slotAt(ghost.x);
+    }
+    return null;
+  }
+
+  // A knock on the cabinet. It costs nothing and it never runs out; what makes
+  // it a skill instead of a joystick is that it is one impulse per thump, and
+  // that a ball can only be knocked so far sideways. Anything already moving
+  // faster than that is left alone, so a bumper's launch is never braked by a
+  // well-meant nudge in the wrong direction.
+  function nudgeBoard(dir) {
+    if (!dir) return;
+    if (window.NovaWheel && window.NovaWheel.isOpen()) return;
+    if (state.status === "over" || state.status === "ending") return;
+
+    const now = performance.now();
+    if (now - state.lastNudgeAt < NUDGE_COOLDOWN) return;
+
+    // Only balls still in the air answer; a ball already in a pocket is spent.
+    const live = state.activeBalls.filter((ball) => !ball.captured);
+    if (!live.length) return;
+
+    state.lastNudgeAt = now;
+    state.nudges += 1;
+
+    for (const ball of live) {
+      // Credit only counts if the knock changed the answer, so the counterfactual
+      // is run twice: where this ball was already going, and where it is going
+      // now. A knock that does not flip the prediction into the jackpot is just
+      // a knock, and any earlier claim is dropped.
+      const before = predictLanding(ball);
+
+      const weight = NUDGE_WEIGHT[ball.type] || 1;
+      const target = clamp(
+        ball.vx + dir * NUDGE_IMPULSE * weight,
+        -NUDGE_LATERAL_MAX,
+        NUDGE_LATERAL_MAX
+      );
+      if (dir > 0 ? target > ball.vx : target < ball.vx) ball.vx = target;
+
+      const after = predictLanding(ball);
+      ball.skillshotAt =
+        after && after.jackpot && !(before && before.jackpot) ? now : 0;
+    }
+
+    // The jolt stacks while you mash and rings out on its own.
+    if (!REDUCED_MOTION) {
+      state.shake = Math.min(NUDGE_SHAKE_MAX, state.shake + 1);
+      state.shakeDir = dir;
+      state.shakeT = 0;
+    }
+    sfxNudge(dir);
+    haptic(14);
+  }
+
+  // The one moment worth shouting about: a ball the board had already given up
+  // on, pulled into the jackpot by hand.
+  function showSkillshot() {
+    if (!ui.skillshot) return;
+    // Size it now rather than at load: the display font can swap in after the
+    // first layout, and a size measured against the fallback overflows the
+    // glass. By the time this fires the font is long settled.
+    fitSkillshot();
+    ui.skillshot.classList.remove("show");
+    void ui.skillshot.offsetWidth;
+    ui.skillshot.classList.add("show");
+    window.clearTimeout(skillshotTimer);
+    skillshotTimer = window.setTimeout(() => {
+      ui.skillshot.classList.remove("show");
+    }, 1800);
+    sfxSkillshot();
+    haptic([0, 18, 26, 46]);
+  }
+
+  // Bright, short, and above the jackpot chord rather than inside it: the
+  // fanfare keeps the low end, this is the sparkle on top.
+  function sfxSkillshot() {
+    tone(1568, 0.22, "sine", 0.016, 2093, 0, 0, 0.4);
+    tone(2093, 0.32, "sine", 0.012, 2637, 0, 0.07, 0.45);
+    tone(784, 0.18, "triangle", 0.012, 784, 0, 0.02, 0.2);
+  }
+
+  // A damped wobble in two axes: the hit side goes first, the cabinet rings,
+  // and it is still again in a little over a frame's worth of a fifth of a
+  // second. Done as a translate on the canvas so the compositor owns it.
+  function updateShake(dt) {
+    if (!state.shake) return;
+
+    state.shakeT += dt;
+    const decay = Math.exp(-state.shakeT * SHAKE_DECAY);
+    const amplitude = state.shake * NUDGE_SHAKE_PX * decay;
+
+    if (amplitude < 0.3) {
+      state.shake = 0;
+      state.shakeT = 0;
+      if (appliedShake) {
+        appliedShake = "";
+        canvas.style.transform = "";
+      }
+      return;
+    }
+
+    const wave = state.shakeT * SHAKE_FREQ;
+    const x = (state.shakeDir * amplitude * Math.cos(wave)).toFixed(2);
+    const y = (amplitude * 0.4 * Math.sin(wave)).toFixed(2);
+    const next = `translate(${x}px, ${y}px)`;
+    if (next === appliedShake) return;
+    appliedShake = next;
+    canvas.style.transform = next;
+  }
+
+  // The buttons go quiet when there is nothing in the air to knock, which is
+  // also the honest answer to "can I nudge right now".
+  function updateNudgeUi() {
+    const live = state.activeBalls.some((ball) => !ball.captured);
+    if (live === nudgeUiLive) return;
+    nudgeUiLive = live;
+    if (ui.nudgeLeftBtn) ui.nudgeLeftBtn.classList.toggle("idle", !live);
+    if (ui.nudgeRightBtn) ui.nudgeRightBtn.classList.toggle("idle", !live);
   }
 
   // What goes down the chute: a manual pick wins, then (under a sweep only) the
@@ -1799,6 +2075,9 @@
       captureAge: 0,
       alpha: 1,
       jackpotTension: false,
+      // Set when a knock changed where this ball was already heading, cleared
+      // by the next knock if that one turns out to be the decisive one.
+      skillshotAt: 0,
       chainHits: 0,
       hitPegs: new Set(),
       trail: []
@@ -1866,8 +2145,8 @@
     if (label) label.textContent = state.auto ? "ON" : "SWEEP";
     if (ui.aimHint) {
       ui.aimHint.innerHTML = state.auto
-        ? "Auto drop <span>·</span> sweeping the board"
-        : "Move to aim <span>·</span> click the board to drop";
+        ? "Auto drop <span>·</span> sweeping <span>·</span> ← → nudge"
+        : "Move to aim <span>·</span> click to drop <span>·</span> ← → nudge";
     }
     ui.autoBtn.title = state.auto
       ? "Auto drop is on — click to stop (A)"
@@ -1896,10 +2175,16 @@
     // edges, so lanes get an even share of the burst.
     const progress = state.autoPhase / (Math.PI * 2);
     const triangle = 4 * Math.abs(progress - 0.5) - 1;
-    const margin = BALL_R + 18;
     const center = (PLAY.left + PLAY.right) / 2;
-    const half = Math.max(0, (PLAY.right - margin - (PLAY.left + margin)) / 2);
-    state.aimX = center + triangle * half * 0.86;
+    // The sweep stops at the middle of the two "+1 BALL" lanes. Past that the
+    // chute sits over a 100-point lane, and a ball dropped against the rail
+    // falls straight into it — an automatic ball landing in the worst slot reads
+    // worse than no ball at all. All five paying lanes stay inside this range.
+    const firstInner = slots[1];
+    const lastInner = slots[slots.length - 2];
+    const safeLeft = firstInner.x + firstInner.w / 2;
+    const safeRight = lastInner.x + lastInner.w / 2;
+    state.aimX = center + triangle * ((safeRight - safeLeft) / 2);
   }
 
   function scheduleAutoDrop(delay = AUTO_DROP_MS) {
@@ -2124,6 +2409,14 @@
     state.aimX = W / 2;
     state.autoPhase = Math.PI / 2;
     state.lastDropAt = -9999;
+    state.lastNudgeAt = -9999;
+    state.nudges = 0;
+    state.shake = 0;
+    state.shakeDir = 0;
+    state.shakeT = 0;
+    appliedShake = "";
+    canvas.style.transform = "";
+    stopCinemaBed(0.05);
     state.slowMo = 0;
     state.tensionBall = null;
     state.cinema = 0;
@@ -3737,6 +4030,7 @@
       }
       if (!audioBus) audioBus = buildAudioBus(audioCtx);
       loadBumperSample(audioCtx);
+      loadHeartbeatSample(audioCtx);
       if (audioCtx.state === "suspended") {
         audioCtx.resume().catch(() => {});
       }
@@ -3924,9 +4218,15 @@
   // The last second of a spin dips the room away and blooms a held G under it,
   // so the landing chord lands in a pocket of quiet. G is the dominant of the
   // C-major reveal, so the whole thing resolves instead of just stopping.
-  function startWheelTension() {
+  function startWheelTension(options = {}) {
     const ac = ensureAudio();
     if (!ac || tensionVoice) return;
+
+    // The wheel wants a slow bloom under its last second. A board scene can be
+    // over in less than that, so it asks for a fast attack instead of being
+    // stuck behind the wheel's 1.2 s ramp.
+    const attack = Number.isFinite(options.attack) ? options.attack : 1.2;
+    const level = Number.isFinite(options.level) ? options.level : 0.018;
 
     const start = ac.currentTime;
     const voice = { gain: ac.createGain(), oscs: [] };
@@ -3935,7 +4235,7 @@
     filter.type = "lowpass";
     filter.Q.value = 0.9;
     filter.frequency.setValueAtTime(560, start);
-    filter.frequency.linearRampToValueAtTime(1500, start + 1.5);
+    filter.frequency.linearRampToValueAtTime(1500, start + attack * 1.25);
 
     const notes = [
       { hz: 49, vol: 0.16, type: "sine" },
@@ -3960,8 +4260,8 @@
 
     filter.connect(voice.gain);
     voice.gain.gain.setValueAtTime(0.0001, start);
-    voice.gain.gain.exponentialRampToValueAtTime(0.018, start + 1.2);
-    voice.gain.gain.setValueAtTime(0.018, start + 1.8);
+    voice.gain.gain.exponentialRampToValueAtTime(level, start + attack);
+    voice.gain.gain.setValueAtTime(level, start + attack + 0.6);
     routeToBus(ac, voice.gain, 0, 0.42);
 
     tensionVoice = voice;
@@ -4088,6 +4388,60 @@
     } catch {
       bumperLoading = false;
     }
+  }
+
+  // The slow-motion heartbeat is a recording, so it loads the same way the
+  // bumper sample does: base64 in a data URI, decoded once, and quietly backed
+  // by the synthesised thump if it is not there yet.
+  let heartbeatSample = null;
+  let heartbeatLoading = false;
+
+  function loadHeartbeatSample(ac) {
+    if (heartbeatSample || heartbeatLoading || !window.NOVA_HEARTBEAT_SAMPLE) return;
+    heartbeatLoading = true;
+    try {
+      const base64 = window.NOVA_HEARTBEAT_SAMPLE.split(",")[1] || "";
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      ac.decodeAudioData(
+        bytes.buffer,
+        (decoded) => {
+          heartbeatSample = decoded;
+          heartbeatLoading = false;
+        },
+        () => {
+          heartbeatLoading = false;
+        }
+      );
+    } catch {
+      heartbeatLoading = false;
+    }
+  }
+
+  // One recorded lub-dub. It is peak-normalised to about -6 dBFS, so it needs
+  // roughly twice the gain the synthesised thump did to sit at the same level.
+  function playCinemaBeat(master, level) {
+    const ac = ensureAudio();
+    if (!ac) return;
+
+    if (heartbeatSample) {
+      const src = ac.createBufferSource();
+      src.buffer = heartbeatSample;
+      // A little rate variation per beat, so four repetitions do not read as a
+      // loop.
+      src.playbackRate.value = 0.96 + Math.random() * 0.08;
+      const gain = ac.createGain();
+      gain.gain.value = level * 2;
+      src.connect(gain).connect(master);
+      src.start(ac.currentTime);
+      return;
+    }
+
+    // Fallback until the sample decodes, or if the file is not there: a round
+    // pair of sines, no triangle in it.
+    tone(58, 0.19, "sine", level, 44, -0.05, 0, 0.08);
+    tone(116, 0.12, "sine", level * 0.5, 92, -0.05, 0, 0.05);
   }
 
   function playBumperSample(power, pan, wet) {
@@ -4223,6 +4577,16 @@
     }
   }
 
+  // A nudge is the sound of the machine being hit, not a note the machine
+  // plays: a low wooden thump with a short metal edge, panned to the side that
+  // took the knock.
+  function sfxNudge(dir) {
+    const pan = dir * 0.45;
+    tone(78, 0.16, "triangle", 0.05, 54, pan, 0, 0.14);
+    tone(196, 0.06, "square", 0.012, 138, pan, 0, 0.05);
+    tone(430, 0.035, "triangle", 0.005, 300, pan, 0.012, 0.08);
+  }
+
   function sfxGoldPin() {
     tone(1060, 0.14, "sine", 0.026, 1420, 0);
     tone(1590, 0.11, "triangle", 0.012, 1760, 0, 0.03);
@@ -4277,10 +4641,8 @@
   function sfxPlungeTension() {
     tone(48, 1.6, "sine", 0.05, 41, 0, 0, 0.22);
     tone(98, 1.3, "sine", 0.024, 104, 0, 0.06, 0.26);
-    [0, 0.44].forEach((offset) => {
-      tone(58, 0.18, "sine", 0.042, 46, 0, 0.34 + offset, 0.1);
-      tone(58, 0.13, "sine", 0.026, 44, 0, 0.51 + offset, 0.1);
-    });
+    // The two sub-bass heartbeats that used to live here are gone: the cinema
+    // bed now plays a real lub-dub, and two of them fighting is a flurry.
     tone(392, 1.6, "triangle", 0.011, 587, 0.1, 1.05, 0.32);
   }
 
@@ -4355,12 +4717,110 @@
     }
   }
 
-  function sfxFinalBall() {
-    tone(65.4, 1.7, "sine", 0.03, 61.7, 0, 0, 0.45);
-    tone(98, 1.5, "sine", 0.017, 92.5, 0, 0.05, 0.45);
-    tone(196, 1.1, "sine", 0.011, 196, 0, 0.1, 0.4);
-    tone(72, 0.22, "sine", 0.02, 58, 0, 0, 0.18);
-    tone(72, 0.22, "sine", 0.013, 58, 0, 0.28, 0.18);
+  // ---- The cinema bed ------------------------------------------------------
+  // Both slow-motion scenes were scored almost entirely in sub-bass (48-98 Hz),
+  // which is silence on a laptop or a phone, and the time dilation pulls the
+  // pin hits so far apart that the room empties out. The pad is the engine's
+  // existing tension drone — the same held G the wheel blooms under its last
+  // second, already in the midrange, already ducking the room, already able to
+  // stop. The cinema adds the two things the wheel does not need: air climbing
+  // with the ball, and a heartbeat that stretches as the picture slows.
+  function stopCinemaBed(fade = 0.16) {
+    const bed = cinemaBed;
+    if (!bed) return;
+    cinemaBed = null;
+
+    for (const id of bed.timers) window.clearTimeout(id);
+    if (bed.drone) endWheelTension();
+
+    const ac = audioCtx;
+    if (ac && bed.gain) {
+      const now = ac.currentTime;
+      const level = Math.max(0.0002, bed.gain.gain.value);
+      bed.gain.gain.cancelScheduledValues(now);
+      bed.gain.gain.setValueAtTime(level, now);
+      bed.gain.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+    }
+
+    window.setTimeout(() => {
+      for (const source of bed.sources) {
+        try {
+          source.stop();
+        } catch {
+          // Already stopped; nothing to do.
+        }
+      }
+      try {
+        bed.gain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    }, fade * 1000 + 80);
+  }
+
+  function startCinemaBed(plunge) {
+    const ac = ensureAudio();
+    if (!ac) return;
+    stopCinemaBed(0.04);
+
+    const start = ac.currentTime;
+    // Long enough to outlast the slowest plunge, and cut by the landing if the
+    // ball gets there first.
+    const length = plunge ? 3.4 : 2.8;
+
+    // The final ball gets the recorded heartbeat and nothing under it: the held
+    // drone and the glide both read as a buzz next to it. The plunge keeps the
+    // drone, because its cue is a different, composed piece.
+    let ownsDrone = false;
+    if (plunge) {
+      ownsDrone = !tensionVoice;
+      startWheelTension({ attack: 0.12, level: 0.022 });
+    }
+
+    const master = ac.createGain();
+    master.gain.setValueAtTime(1, start);
+    routeToBus(ac, master, 0, 0.3);
+
+    const sources = [];
+    const timers = [];
+
+    // The plunge's lift, as tone rather than air: two sines a fifth apart
+    // gliding up together. Filtered noise was the first attempt and it read as
+    // a buzz; the final ball does not get this layer at all.
+    for (const detune of plunge ? [-4, 5] : []) {
+      const glide = ac.createOscillator();
+      glide.type = "sine";
+      const ratio = 1 + detune / 1200;
+      glide.frequency.setValueAtTime(392 * ratio, start);
+      glide.frequency.exponentialRampToValueAtTime(587 * ratio, start + length * 0.85);
+
+      const gain = ac.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.007, start + 0.35);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      glide.connect(gain).connect(master);
+      glide.start(start);
+      glide.stop(start + length + 0.05);
+      sources.push(glide);
+    }
+
+    cinemaBed = { gain: master, sources, timers, drone: ownsDrone };
+
+    // The heartbeat: one recorded lub-dub per beat, each beat set further from
+    // the last so the pulse stretches with the picture. The sample is a whole
+    // cycle, so it only needs one voice per beat — and the interval has to be
+    // at least as long as the sample or the pairs pile up.
+    // Starts immediately: the scene can be over inside a second, and a heartbeat
+    // that arrives after the ball has landed is not a heartbeat.
+    let at = 0.02;
+    let interval = 0.62;
+    while (at < length - 0.3) {
+      const id = window.setTimeout(() => playCinemaBeat(master, 0.05), at * 1000);
+      timers.push(id);
+      at += interval;
+      interval *= 1.26;
+    }
   }
 
   function sfxChainUp(multiplier) {
