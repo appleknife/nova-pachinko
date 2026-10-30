@@ -228,11 +228,29 @@
   // only place a ball is chosen, which is why the old every-fifth gold ball is
   // gone: it used to be a second, silent special case fighting this one.
   const BALL_TYPES = {
-    standard: { label: "STD", rest: 1, scale: 1, look: "standard" },
-    heavy: { label: "HEAVY", rest: 0.42, scale: 1.12, look: "heavy" },
-    bouncy: { label: "BOUNCY", rest: 1.5, scale: 0.96, look: "bouncy" },
-    tiny: { label: "TINY", rest: 1.05, scale: 0.6, look: "tiny" },
-    encore: { label: "ENCORE", rest: 1, scale: 1, look: "encore" }
+    standard: {
+      label: "STD", rest: 1, scale: 1, gravity: 1, pitch: 1, trail: 12, jitter: 1,
+      look: "standard", hint: "The default ball"
+    },
+    // Every type is a different verb, not a different number: the heavy one is
+    // aim, the bouncy one is chaos, the tiny one is threading a needle, and the
+    // encore is a second chance.
+    heavy: {
+      label: "HEAVY", rest: 0.1, scale: 1.3, gravity: 1.45, pitch: 0.62, trail: 7, jitter: 0.5,
+      look: "heavy", hint: "Drops like a stone and barely deflects. Aim it and it lands there."
+    },
+    bouncy: {
+      label: "BOUNCY", rest: 1.8, scale: 1, gravity: 0.88, pitch: 1.45, trail: 16, jitter: 1.6,
+      look: "bouncy", hint: "Ricochets off everything and keeps its speed. Builds chains."
+    },
+    tiny: {
+      label: "TINY", rest: 1.05, scale: 0.42, gravity: 1.1, pitch: 1.8, trail: 20, jitter: 1,
+      look: "tiny", hint: "Falls through gaps nothing else fits through."
+    },
+    encore: {
+      label: "ENCORE", rest: 1, scale: 1, gravity: 1, pitch: 1.12, trail: 14, jitter: 1,
+      look: "encore", hint: "Misses the jackpot, comes back for one more drop."
+    }
   };
 
   const BALL_LOOK = {
@@ -901,9 +919,12 @@
         continue;
       }
 
-      ball.vy += GRAVITY * dt;
+      // Gravity is per ball: a heavy one falls harder, a bouncy one floats a
+      // little longer so its ricochets have time to read.
+      ball.vy += GRAVITY * (ball.gravity || 1) * dt;
       ball.vx *= 1 - 0.045 * dt;
       ball.vy *= 1 - 0.018 * dt;
+      if (ball.squash > 0) ball.squash = Math.max(0, ball.squash - dt * 5.5);
 
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
@@ -914,7 +935,7 @@
       ball.trailPhase = (ball.trailPhase || 0) + 1;
       if (ball.trailPhase % 3 === 0) {
         ball.trail.push({ x: ball.x, y: ball.y });
-        if (ball.trail.length > 12) ball.trail.shift();
+        if (ball.trail.length > (ball.trailMax || 12)) ball.trail.shift();
       }
 
       const speed = Math.hypot(ball.vx, ball.vy);
@@ -1037,7 +1058,7 @@
     // The deck's whole job is this number: a heavy ball barely answers the pin,
     // a bouncy one answers with interest. Clamped so a bouncy ball cannot gain
     // energy off a pin and rocket around until the solver gives up.
-    const restitution = Math.min(0.95, (pin.gold ? 0.7 : 0.59) * (ball.rest || 1));
+    const restitution = Math.min(0.97, (pin.gold ? 0.7 : 0.59) * (ball.rest || 1));
     const impulse = -(1 + restitution) * normalSpeed;
 
     ball.vx += nx * impulse;
@@ -1046,12 +1067,18 @@
     const tx = -ny;
     const ty = nx;
     const tangentSpeed = ball.vx * tx + ball.vy * ty;
-    const tangentLoss = pin.gold ? 0.07 : 0.045;
+    // A bouncy ball keeps its sideways speed, which is what makes it a
+    // pinball instead of just a higher-bounce standard ball.
+    const slip = ball.type === "bouncy" ? 0.4 : 1;
+    const tangentLoss = (pin.gold ? 0.07 : 0.045) * slip;
     ball.vx -= tx * tangentSpeed * tangentLoss;
     ball.vy -= ty * tangentSpeed * tangentLoss;
 
-    ball.vx += (Math.random() - 0.5) * 14;
+    const jitter = 14 * (ball.jitter || 1);
+    ball.vx += (Math.random() - 0.5) * jitter;
     ball.vy += (Math.random() - 0.5) * 4;
+
+    if (ball.type === "bouncy") ball.squash = 1;
 
     if (pin.gold) {
       // A lucky pin is a bumper, not a bouncier pin. However fast the ball was
@@ -1369,6 +1396,10 @@
       const echo = makeBall(clamp(ball.x, PLAY.left + 30, PLAY.right - 30), "encore");
       echo.encoreUsed = true;
       state.activeBalls.push(echo);
+      // A rising whoosh so the return reads as the ball coming back, not as a
+      // second ball appearing out of nowhere.
+      noiseSweep(380, 1500, 0.3, 0.01, 2.4, 0, 0.16);
+      tone(392, 0.28, "triangle", 0.016, 587, 0, 0, 0.2);
       addFloatingText(slot.center, SLOT_TOP - 112, "ENCORE · ONE MORE", C.gold, 16, 1.7);
     }
 
@@ -1460,6 +1491,7 @@
       chip.type = "button";
       chip.className = "deck-chip";
       chip.dataset.ball = type;
+      chip.title = BALL_TYPES[type].hint;
 
       const name = document.createElement("span");
       name.className = "deck-name";
@@ -1719,6 +1751,11 @@
       r: BALL_R * spec.scale,
       type,
       rest: spec.rest,
+      gravity: spec.gravity,
+      pitch: spec.pitch,
+      trailMax: spec.trail,
+      jitter: spec.jitter,
+      squash: 0,
       voice: Math.floor(Math.random() * 3),
       age: 0,
       slowTime: 0,
@@ -1772,7 +1809,7 @@
 
     bumpElement(ui.balls.parentElement, "bump", 300);
     ensureAudio();
-    sfxDrop(type !== "standard");
+    sfxDrop(type);
 
     if (type !== "standard") {
       const look = ballLook(ball);
@@ -3031,9 +3068,58 @@
     return sprite;
   }
 
+  // Per-type silhouette details, drawn after the body. These are what make the
+  // types readable at a glance instead of "a ball in another colour".
+  function drawBallDecor(ball) {
+    if (ball.type === "heavy") {
+      ctx.strokeStyle = "rgba(48, 26, 12, 0.6)";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r * 0.52, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (ball.type === "bouncy") {
+      const pulse = 0.5 + Math.sin(state.time * 7 + ball.y * 0.05) * 0.5;
+      ctx.strokeStyle = `rgba(150, 255, 220, ${0.16 + pulse * 0.24})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r + 3.5 + pulse * 2.4, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (ball.type === "tiny") {
+      const arm = ball.r + 3;
+      ctx.strokeStyle = "rgba(224, 250, 255, 0.7)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ball.x - arm, ball.y);
+      ctx.lineTo(ball.x + arm, ball.y);
+      ctx.moveTo(ball.x, ball.y - arm);
+      ctx.lineTo(ball.x, ball.y + arm);
+      ctx.stroke();
+    } else if (ball.type === "encore") {
+      const spin = state.time * 1.7;
+      const size = ball.r * 1.7;
+      ctx.strokeStyle = "rgba(255, 238, 186, 0.85)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const angle = spin + (i * Math.PI) / 2;
+        ctx.moveTo(ball.x, ball.y);
+        ctx.lineTo(ball.x + Math.cos(angle) * size, ball.y + Math.sin(angle) * size);
+      }
+      ctx.stroke();
+    }
+  }
+
   function drawBall(ball, alpha, captured) {
     ctx.save();
     ctx.globalAlpha = alpha;
+
+    // A bouncy ball squashes on every pin it hits. Purely a drawing transform:
+    // the simulation still sees a circle, which keeps the solver honest.
+    if (ball.squash > 0.01) {
+      ctx.translate(ball.x, ball.y);
+      ctx.scale(1 + 0.38 * ball.squash, 1 - 0.3 * ball.squash);
+      ctx.translate(-ball.x, -ball.y);
+    }
 
     const look = ballLook(ball);
 
@@ -3067,6 +3153,8 @@
     ctx.strokeStyle = look.ring;
     ctx.lineWidth = 0.9;
     ctx.stroke();
+
+    drawBallDecor(ball);
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
     ctx.beginPath();
@@ -4083,11 +4171,14 @@
     // twelve does not collapse into one unison pitch.
     const register = ball ? [0, 7, 12][ball.voice % 3] : 0;
     const base = 220 * Math.pow(2, (note + register) / 12);
-    const frequency = base + Math.random() * 6 + clamp(impact, 0, 400) * 0.02;
+    // The ball's own register on top of the chain register: a heavy ball thuds,
+    // a tiny one ticks, a bouncy one rings.
+    const pitch = ball && ball.pitch ? ball.pitch : 1;
+    const frequency = (base + Math.random() * 6 + clamp(impact, 0, 400) * 0.02) * pitch;
 
     const soft = 1 - Math.min(0.3, chainHits * 0.006);
     const volume = (0.011 + Math.min(0.016, impact * 0.000055)) * soft;
-    const cutoff = 900 + Math.min(5600, impact * 15);
+    const cutoff = (900 + Math.min(5600, impact * 15)) * pitch;
     const duration = 0.045 + Math.min(0.03, impact * 0.00009) + Math.random() * 0.015;
 
     pinVoice(ac, frequency, duration, volume, pan, cutoff);
@@ -4273,10 +4364,21 @@
     noise.stop(start + 0.72);
   }
 
-  function sfxDrop(gold) {
-    if (gold) {
-      tone(530, 0.11, "sine", 0.028, 900);
-      tone(930, 0.15, "triangle", 0.018, 1320, 0, 0.08);
+  // Each ball announces itself as it leaves the chute, so the choice is audible
+  // before it is visible.
+  function sfxDrop(type) {
+    if (type === "heavy") {
+      tone(96, 0.17, "sine", 0.036, 58, 0, 0, 0.1);
+      tone(64, 0.24, "triangle", 0.018, 46, 0, 0.01, 0.06);
+    } else if (type === "bouncy") {
+      tone(300, 0.2, "sine", 0.03, 780);
+      tone(780, 0.13, "triangle", 0.014, 990, 0, 0.07);
+    } else if (type === "tiny") {
+      tone(1320, 0.05, "sine", 0.017, 1780);
+      tone(1980, 0.04, "sine", 0.008, 2100, 0, 0.02);
+    } else if (type === "encore") {
+      tone(523, 0.14, "triangle", 0.022, 784);
+      tone(1046, 0.22, "sine", 0.011, 1318, 0, 0.07);
     } else {
       tone(180, 0.08, "sine", 0.025, 260);
     }
