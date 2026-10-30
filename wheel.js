@@ -2713,6 +2713,22 @@
       ctx.fillText(value, x + statW / 2, 540);
     });
 
+    // A pot that survived plunges is the story of the run, so it gets its own
+    // line — but only when it actually happened.
+    if (Number(data.doubles) > 0) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255, 199, 95, 0.92)";
+      ctx.font = '700 15px Bahnschrift, "Trebuchet MS", sans-serif';
+      drawSpacedText(
+        ctx,
+        `POT DOUBLED ×${data.doubles} · PEAK ${Number(data.peakPot) || 0} TOKENS`,
+        W / 2,
+        598,
+        1.8
+      );
+      ctx.textAlign = "left";
+    }
+
     ctx.textAlign = "left";
     ctx.fillStyle = "#907d9a";
     ctx.font = '700 14px Bahnschrift, "Trebuchet MS", sans-serif';

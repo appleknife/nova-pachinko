@@ -202,7 +202,10 @@
   const state = {
     status: "ready",
     started: false,
-    runStats: { jackpots: 0, tokensEarned: 0, bestChain: 0 },
+    // tokensEarned is what the jackpots minted; tokensBanked is what actually
+    // reached the wallet, which includes everything a plunge doubled. The run
+    // card shows the second one, because that is the number the player earned.
+    runStats: { jackpots: 0, tokensEarned: 0, tokensBanked: 0, bestChain: 0, doubles: 0, peakPot: 0 },
     score: 0,
     best: loadNumber("nova-pachinko-best-v1", 0),
     runBestStart: 0,
@@ -652,7 +655,10 @@
           score: state.score,
           best: state.best,
           jackpots: state.runStats.jackpots,
-          tokens: state.runStats.tokensEarned,
+          tokens: state.runStats.tokensBanked,
+          minted: state.runStats.tokensEarned,
+          doubles: state.runStats.doubles,
+          peakPot: state.runStats.peakPot,
           chain: Math.min(5, 1 + Math.floor(state.runStats.bestChain / chainStep)),
           // Rarest first: a card with a mythic on it should lead with it.
           loot: [...state.runLoot].sort(
@@ -1572,6 +1578,8 @@
         // the token it just minted.
         state.overflow.hit = true;
         state.pot *= 2;
+        state.runStats.doubles += 1;
+        state.runStats.peakPot = Math.max(state.runStats.peakPot, state.pot);
         updatePotUi();
         state.flash = REDUCED_MOTION ? 0.16 : 0.5;
         addFloatingText(
@@ -1682,6 +1690,7 @@
     if (amount <= 0) return;
 
     state.pot += amount;
+    state.runStats.peakPot = Math.max(state.runStats.peakPot, state.pot);
     updatePotUi();
 
     if (ui.potStrip) {
@@ -2022,6 +2031,7 @@
 
     state.pot = 0;
     updatePotUi();
+    state.runStats.tokensBanked += amount;
     if (window.NovaWheel && typeof window.NovaWheel.awardToken === "function") {
       window.NovaWheel.awardToken(amount, source || "banked");
     }
@@ -2420,7 +2430,7 @@
   function updateVaultReport(summary) {
     if (ui.runJackpots) {
       ui.runJackpots.textContent = String(state.runStats.jackpots);
-      ui.runTokens.textContent = String(state.runStats.tokensEarned);
+      ui.runTokens.textContent = String(state.runStats.tokensBanked);
       const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
       const bestMultiplier = Math.min(
         5,
@@ -2502,7 +2512,7 @@
 
     state.status = "ready";
     state.started = false;
-    state.runStats = { jackpots: 0, tokensEarned: 0, bestChain: 0 };
+    state.runStats = { jackpots: 0, tokensEarned: 0, tokensBanked: 0, bestChain: 0, doubles: 0, peakPot: 0 };
     state.runLoot = [];
     state.score = 0;
     state.runBestStart = state.best;

@@ -104,6 +104,10 @@ The rail band is nearly twice as wide for a finger, and it starts inside the
 frame: the outermost strip of a phone screen belongs to the OS back-gesture, so
 a band that began at the very edge could never be hit.
 
+### The run card counts the tokens you actually earned
+
+`NOVA TOKENS` used to show what the jackpots **minted**, so a pot that doubled three times on plunges and cashed out at 72 still read as the 9 it started from. It now shows what **reached the wallet** (`runStats.tokensBanked`, accumulated in `bankPot`), and when the pot doubled the card says so underneath: `POT DOUBLED ×3 · PEAK 72 TOKENS`.
+
 ### Hidden: tap the wheel to skip
 
 Tapping the wheel while it is spinning **skips the spin** — the same tap spins
@@ -143,6 +147,7 @@ for the rest.
 
 ## Under the hood (for the next session)
 
+- `runStats` carries both `tokensEarned` (minted by jackpots) and `tokensBanked` (what actually reached the wallet, including plunge doubles), plus `doubles` and `peakPot`. The run card and the report tile show the banked number.
 - Full screen is `body.play` plus `#playBar`. The stage is sized height-first
   (`height: min(100dvh - 96px, 100vw * 1.3947368)` with `aspect-ratio`) because a
   width-driven box collapses on a short viewport, and the canvas re-fits in a
