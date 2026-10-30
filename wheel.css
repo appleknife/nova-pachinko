@@ -2724,14 +2724,22 @@
     font-size: 29px;
   }
 
+  /* The branch row used to be a horizontal scroller, which hid half the
+     branches behind an edge with no sign they were there. On a phone it wraps
+     to two compact lines instead: everything visible, nothing to discover. */
   .vault-filters {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 5px;
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 4px;
+    margin: 8px 0 7px;
+    padding-bottom: 0;
   }
 
   .vault-filter {
     flex: 0 0 auto;
+    padding: 5px 8px;
+    font-size: 8px;
+    letter-spacing: 0.05em;
   }
 
   .vault-grid {
