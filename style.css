@@ -575,16 +575,16 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #aeb6d2;
+  background: rgba(255, 255, 255, 0.055);
+  color: #c3cae2;
   font-family: var(--ui);
-  font-size: 7.5px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   cursor: pointer;
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease,
     box-shadow 150ms ease, transform 120ms ease;
@@ -611,9 +611,9 @@ h1 {
 }
 
 .deck-chip .deck-count {
-  color: #eae6f5;
+  color: #f2eefc;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
 }
 
@@ -629,10 +629,16 @@ h1 {
   transform: translateY(-1px);
 }
 
-.deck-chip.spent,
+/* Two different reasons to be inactive, and they should not look the same: a
+   spent ball is gone, but "no drops left" is the end of the run and the player
+   still needs to read their deck. */
 .deck-chip:disabled {
-  opacity: 0.34;
+  opacity: 0.66;
   cursor: default;
+}
+
+.deck-chip.spent {
+  opacity: 0.4;
 }
 
 .deck-chip.chip-gain {
@@ -655,24 +661,24 @@ h1 {
 
 .deck-charge {
   margin: 0;
-  color: var(--faint);
-  font-size: 7px;
+  color: #a2aac8;
+  font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
 
 /* Auto pick: the sweep spends the deck itself, for when you are watching
    rather than steering. */
 .deck-auto {
-  padding: 3px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 6px;
-  color: #6f7697;
-  background: transparent;
+  color: #a6aecd;
+  background: rgba(255, 255, 255, 0.04);
   font-family: var(--ui);
-  font-size: 6.5px;
+  font-size: 7.5px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   cursor: pointer;
   transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
 }
@@ -1829,14 +1835,14 @@ h1 {
   }
 
   .deck-chip {
-    min-height: 28px;
+    min-height: 30px;
     padding: 0 6px;
-    font-size: 7px;
-    letter-spacing: 0.06em;
+    font-size: 7.5px;
+    letter-spacing: 0.04em;
   }
 
   .deck-chip .deck-count {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .deck-foot {
@@ -1845,12 +1851,12 @@ h1 {
 
   .deck-charge {
     margin: 0;
-    font-size: 6.5px;
+    font-size: 7px;
   }
 
   .deck-auto {
-    padding: 2px 5px;
-    font-size: 6px;
+    padding: 3px 6px;
+    font-size: 6.5px;
   }
 
   .chain-head span,
