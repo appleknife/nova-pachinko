@@ -620,6 +620,12 @@
       if (!document.fullscreenElement && playMode) setPlayMode(false, false);
     });
 
+    // And a window that grows past the phone breakpoint leaves play mode on its
+    // own, or the way back out (the FULL button) would be gone.
+    window.addEventListener("resize", () => {
+      if (playMode && window.innerWidth > 860) setPlayMode(false, false);
+    });
+
     ui.autoBtn.addEventListener("click", () => {
       setAuto(!state.auto);
       ui.autoBtn.blur();

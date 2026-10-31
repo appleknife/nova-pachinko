@@ -96,6 +96,10 @@ A friend's report: the slot row disappeared. The cause was ours — the phone la
 - The mobile toast moved to the top edge, because at the bottom it was covering the slot labels it was meant to be read above.
 - **FULL** now labels itself like AUTO and HIGH (glyph over a 6px caption) instead of spilling out of its 36px cell.
 
+### Fixed: the FULL button did nothing on desktop
+
+`display: none` for wide screens was in a media query near the top of the file, and a plain `.play-btn` rule added later overrode it — so desktop kept a FULL button while the mode itself refuses to run above 860px. It is hidden on desktop again, and a window that grows past the breakpoint now drops out of play mode by itself, since the way back out would be gone.
+
 ### New: full screen on a phone
 
 The HUD is what eats a phone screen, so **FULL** (or `F`) now hides it and gives

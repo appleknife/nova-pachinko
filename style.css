@@ -2502,13 +2502,9 @@ body.play #gameCanvas {
   color: #9aa3c0;
 }
 
-/* On a wide screen the HUD is a sidebar, so full screen has nothing to win and
-   a bar across the bottom would only make the board smaller. */
-@media (min-width: 861px) {
-  .play-btn {
-    display: none;
-  }
-}
+/* Full screen is phone-only: on a wide screen the HUD is a sidebar, so hiding it
+   wins nothing and the bottom bar would only make the board smaller. Its
+   `display` is set on the base `.play-btn` rule at the end of this file. */
 
 /* On a phone the toast lives at the bottom edge, which is where the play bar is
    — and just above it is the slot row. In play mode it goes back to the top,
@@ -2575,13 +2571,22 @@ body.play #gameCanvas {
 }
 
 /* The FULL button is an icon button like AUTO/HIGH, so it stacks its glyph over
-   a 6px label rather than letting the word spill out of a 36px cell. */
+   a 6px label rather than letting the word spill out of a 36px cell. It is also
+   phone-only — and the `display` lives here, not in a `min-width` query earlier
+   in the file, because a later plain `.play-btn` rule beat that query and left a
+   button on desktop that did nothing when pressed. */
 .play-btn {
-  display: flex;
+  display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
+}
+
+@media (max-width: 860px) {
+  .play-btn {
+    display: flex;
+  }
 }
 
 .play-btn svg {
