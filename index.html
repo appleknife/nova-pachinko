@@ -163,6 +163,14 @@
       <canvas id="gameCanvas" width="760" height="1060" role="img"
         aria-label="A neon pachinko board with a field of metal pins and seven scoring slots along the bottom. The center slot is the jackpot."></canvas>
 
+      <!-- On a phone the nudge pair lives on the cabinet's rails instead of in
+           the HUD: it is the surface that was already nudging, and the row it
+           frees up is what the slots need. -->
+      <button id="railNudgeLeft" class="rail-nudge rail-nudge-left idle" type="button"
+        aria-label="Nudge the board left">◀</button>
+      <button id="railNudgeRight" class="rail-nudge rail-nudge-right idle" type="button"
+        aria-label="Nudge the board right">▶</button>
+
       <div id="finalBallChip" class="final-chip" aria-hidden="true">
         <i class="final-chip-dot"></i>FINAL BALL
       </div>

@@ -32,6 +32,8 @@
     autoBtn: document.getElementById("autoBtn"),
     nudgeLeftBtn: document.getElementById("nudgeLeftBtn"),
     nudgeRightBtn: document.getElementById("nudgeRightBtn"),
+    railNudgeLeft: document.getElementById("railNudgeLeft"),
+    railNudgeRight: document.getElementById("railNudgeRight"),
     playBtn: document.getElementById("playBtn"),
     playBar: document.getElementById("playBar"),
     playDrop: document.getElementById("playDrop"),
@@ -567,6 +569,17 @@
         ensureAudio();
         nudgeBoard(1);
         ui.nudgeRightBtn.blur();
+      });
+    }
+
+    for (const [button, dir] of [
+      [ui.railNudgeLeft, -1],
+      [ui.railNudgeRight, 1]
+    ]) {
+      if (!button) continue;
+      button.addEventListener("click", () => {
+        ensureAudio();
+        nudgeBoard(dir);
       });
     }
 
@@ -1841,7 +1854,14 @@
     const live = state.activeBalls.some((ball) => !ball.captured);
     if (live === nudgeUiLive) return;
     nudgeUiLive = live;
-    for (const button of [ui.nudgeLeftBtn, ui.nudgeRightBtn, ui.playNudgeLeft, ui.playNudgeRight]) {
+    for (const button of [
+      ui.nudgeLeftBtn,
+      ui.nudgeRightBtn,
+      ui.playNudgeLeft,
+      ui.playNudgeRight,
+      ui.railNudgeLeft,
+      ui.railNudgeRight
+    ]) {
       if (button) button.classList.toggle("idle", !live);
     }
   }

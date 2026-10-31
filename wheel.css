@@ -2603,10 +2603,12 @@
 }
 
 @media (max-width: 860px) {
+  /* Top on a phone: the bottom edge is the slot row, and a toast that covers
+     the PTS labels while they are being read is worse than one over the title. */
   .game-toast {
-    top: auto;
-    bottom: max(18px, env(safe-area-inset-bottom));
-    transform: translate(-50%, 16px);
+    top: max(14px, env(safe-area-inset-top, 0px));
+    bottom: auto;
+    transform: translate(-50%, -16px);
   }
 
   /* The toast owns the bottom edge on a phone, so the skip pill sits above it. */

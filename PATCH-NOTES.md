@@ -87,6 +87,15 @@ rest:
   painted over it. The plate is now drawn first, the lettering sits in it, and
   both are scaled with the cabinet instead of fixed at 6 px.
 
+### The phone board fits again — PTS labels included
+
+A friend's report: the slot row disappeared. The cause was ours — the phone layout sized the board from a hardcoded "the HUD is 330px", and the nudge row tipped the HUD past that, so the page overflowed and the `PTS` labels fell off the bottom.
+
+- The phone layout is now **two grid rows** — panels, then cabinet — and the board is sized by whatever height the panels leave. The slots cannot fall off again, whatever stacks up there.
+- The **nudge pair moved out of the HUD and onto the cabinet**. On a phone it sits on the two rails (`◀` / `▶` at mid-height), which is the band that was already nudging, so not one aim tap is lost — and the row it frees is board.
+- The mobile toast moved to the top edge, because at the bottom it was covering the slot labels it was meant to be read above.
+- **FULL** now labels itself like AUTO and HIGH (glyph over a 6px caption) instead of spilling out of its 36px cell.
+
 ### New: full screen on a phone
 
 The HUD is what eats a phone screen, so **FULL** (or `F`) now hides it and gives
@@ -146,6 +155,9 @@ for the rest.
 ---
 
 ## Under the hood (for the next session)
+
+- The phone shell is `grid-template-rows: auto minmax(0, 1fr)` at `100dvh`; the stage is height-driven inside that row (`height: min(100%, calc(100vw * 1.3947368))`, `aspect-ratio` for the width). Never size the board from a guessed HUD height again — that is what hid the slots.
+- The rail nudge buttons sit at `top: 34%; height: 30%; width: 13%` on each side, matching the canvas's own nudge band.
 
 - `runStats` carries both `tokensEarned` (minted by jackpots) and `tokensBanked` (what actually reached the wallet, including plunge doubles), plus `doubles` and `peakPot`. The run card and the report tile show the banked number.
 - Full screen is `body.play` plus `#playBar`. The stage is sized height-first

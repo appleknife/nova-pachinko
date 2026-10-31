@@ -1789,12 +1789,17 @@ h1 {
     --pad-x: 8px;
   }
 
+  /* Two rows: the HUD takes what it needs and the board gets the rest. The old
+     rule sized the board from a hardcoded "HUD is 330px", and once the HUD grew
+     past that the slot row (and its PTS labels) fell off the bottom. */
   .game-shell {
     width: 100%;
     max-width: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: start;
     gap: 8px;
     padding: 8px 8px max(10px, env(safe-area-inset-bottom));
   }
@@ -2017,14 +2022,15 @@ h1 {
     font-size: 18px;
   }
 
+  /* Height-driven inside the row the HUD leaves, capped so it can never be
+     wider than the screen. This is what keeps the slots on-screen. */
   .stage {
-    width: min(
-      calc(100vw - 16px),
-      calc((100dvh - 330px) * 0.7169811)
-    );
-    height: auto;
-    flex: 0 0 auto;
-    margin: auto 0;
+    width: auto;
+    height: min(100%, calc(100vw * 1.3947368));
+    max-width: none;
+    justify-self: center;
+    align-self: start;
+    margin: 0;
   }
 
   #gameCanvas {
@@ -2512,4 +2518,81 @@ body.play #gameCanvas {
     top: max(14px, env(safe-area-inset-top, 0px));
     bottom: auto;
   }
+}
+
+/* ── Nudge, on the cabinet ──────────────────────────────────────────────────
+   A phone does not have room for another HUD row, and the rails are already
+   the nudge surface — so on a narrow screen the pair sits on them instead. The
+   band matches the rail hit area (the outer ~13%), so not one aim tap is lost. */
+.rail-nudge {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .nudge-row {
+    display: none;
+  }
+
+  .rail-nudge {
+    position: absolute;
+    top: 34%;
+    z-index: 4;
+    width: 13%;
+    max-width: 62px;
+    height: 30%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 14px;
+    color: rgba(206, 216, 244, 0.55);
+    background: transparent;
+    font-family: var(--ui);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 150ms ease, background 150ms ease, opacity 150ms ease;
+  }
+
+  .rail-nudge-left {
+    left: 0;
+  }
+
+  .rail-nudge-right {
+    right: 0;
+  }
+
+  .rail-nudge:active:not(.idle) {
+    color: #ffe3aa;
+    background: rgba(255, 199, 95, 0.14);
+  }
+
+  .rail-nudge.idle {
+    opacity: 0.3;
+  }
+}
+
+/* The FULL button is an icon button like AUTO/HIGH, so it stacks its glyph over
+   a 6px label rather than letting the word spill out of a 36px cell. */
+.play-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.play-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.play-btn span {
+  color: #7d83a6;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1;
 }
