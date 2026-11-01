@@ -20,7 +20,7 @@ Open [`index.html`](index.html) in a modern browser. No build step, server, or d
 - **Drop** with a click/tap on the board, the **Drop Ball** button, or **Space**.
 - **Sweep** (the **SWEEP** button, or **A**) toggles auto drop: every remaining ball drops in a rapid stream, then the next run keeps going on its own. While it is on, the chute sweeps steadily between the two `+1 BALL` lanes so the burst spreads across every paying slot instead of stacking in one, and the pointer stops steering the aim until you switch auto off. The sweep deliberately stops short of the outer 100-point lanes: a ball dropped over one of those hugs the rail and falls straight in, and an automatic ball in the worst slot reads worse than no ball at all.
 - **R** restarts a run. **M** toggles sound.
-- **Volume.** The slider next to the mute button is a master volume from **0 to 150**; **100 is the mix as tuned**, and everything above it is headroom for listening closer, not a better setting. It scales the whole cabinet — board, wheel, room tone and music stings all run through the same master bus — so nothing gets left behind when you turn it up or down. It is remembered between visits, ticks softly while you drag so you can set it by ear without dropping a ball, and **M** still mutes instantly without losing the level.
+- **Volume.** Two sliders, one each side of the mute button and both labelled. **SFX** (gold) runs **0 to 150** and scales everything the cabinet synthesises — pins, bumpers, the wheel, room tone, stings; **100 is the mix as tuned**, and above it is headroom for listening closer, not a better setting. **MUSIC** (violet) is the theme on its own, 0 to 100, and it does *not* ride the SFX slider: pull the effects right down and the music stays where you put it. Both are remembered between visits, the SFX slider ticks softly while you drag so you can set it by ear without dropping a ball, and **M** mutes both instantly without losing either level.
 - **Render resolution** cycles **auto → high → low** with the gauge button next to restart (or **Q** on a keyboard). It is remembered between visits. Auto is the right choice for almost everyone; use **low** if a device still stutters, **high** if your GPU has headroom and you want maximum sharpness.
 - Every run starts with 12 balls by default. The board has a guarded center jackpot, two bonus-ball slots, and chain multipliers for pin hits. Relics can alter the starting count, chain cadence, lucky-ball cadence, score, bonus slots, and jackpot token payout.
 - **The ball deck.** Four one-shot balls sit in the panel, and you pick one before a drop (click a chip, or **1-4** on a keyboard). Each is a different verb, not a different number — they fall differently, look different, and sound different:
@@ -203,7 +203,7 @@ The browser saves:
 
 - best pachinko score
 - sound preference
-- master volume (0-150, default 100)
+- sound-effects volume (0-150, default 100) and music volume (0-100, default 60), independent
 - Nova Token wallet
 - pity counter
 - spin count

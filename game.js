@@ -5474,7 +5474,7 @@
       ui.volumeSlider.value = String(percent);
       // The filled part of the track runs to 150, the slider's own maximum.
       ui.volumeSlider.style.setProperty("--vol", `${(percent / 150) * 100}%`);
-      ui.volumeSlider.title = `Master volume ${percent}%`;
+      ui.volumeSlider.title = `Sound effects volume ${percent}%`;
     }
     updateMusicUi();
   }
@@ -5487,10 +5487,12 @@
     ui.musicSlider.title = `Music volume ${percent}%`;
   }
 
-  // What the element's volume should be right now: master × music × the duck.
+  // Music has its own slider and does not ride the SFX one: two independent
+  // controls, one mute. (It used to multiply, which meant pulling the effects
+  // down quietly dragged the music down with it.)
   function themeTarget() {
-    const master = state.muted ? 0 : clamp(masterVolume, 0, 1.5);
-    return clamp(master * musicVolume * themeDuck, 0, 1);
+    if (state.muted) return 0;
+    return clamp(musicVolume * themeDuck, 0, 1);
   }
 
   function startTheme() {

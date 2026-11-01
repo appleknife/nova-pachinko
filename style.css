@@ -2641,3 +2641,24 @@ body.play #gameCanvas {
     width: 44px;
   }
 }
+
+/* Two sliders and a mute, and no guessing which is which: each one carries a
+   caption, the same 6px tracked capitals the icon buttons use. */
+.vol-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.vol-field > span {
+  color: #7d83a6;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1;
+}
+
+.vol-field .volume-slider {
+  height: 26px;
+}

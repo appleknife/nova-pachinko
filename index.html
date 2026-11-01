@@ -28,10 +28,16 @@
       <div class="brand-row">
         <div class="brand-mark" aria-hidden="true"><span>✦</span></div>
         <div class="audio-tools">
-          <input id="volumeSlider" class="volume-slider" type="range" min="0" max="150" step="5" value="100"
-            aria-label="Master volume" title="Master volume">
-          <input id="musicSlider" class="volume-slider music-slider" type="range" min="0" max="100" step="5" value="60"
-            aria-label="Music volume" title="Music volume">
+          <label class="vol-field">
+            <input id="volumeSlider" class="volume-slider" type="range" min="0" max="150" step="5" value="100"
+              aria-label="Sound effects volume" title="Sound effects volume">
+            <span>SFX</span>
+          </label>
+          <label class="vol-field">
+            <input id="musicSlider" class="volume-slider music-slider" type="range" min="0" max="100" step="5" value="60"
+              aria-label="Music volume" title="Music volume">
+            <span>MUSIC</span>
+          </label>
           <button id="soundBtn" class="sound-btn" type="button" aria-label="Mute sound" aria-pressed="false" title="Sound (M)">
           <svg class="sound-on" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
