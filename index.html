@@ -514,6 +514,9 @@
   </noscript>
   <div id="announcer" class="sr-only" aria-live="polite"></div>
   <audio id="theme" src="audio/theme.mp3" loop preload="auto"></audio>
+  <!-- The board-hot loop. Fetched on the first gesture, not at load: it is only
+       needed once the filament fills, and heating takes a while. -->
+  <audio id="theme-hot" src="audio/theme-hot.mp3" loop preload="none"></audio>
   <script src="audio/bump.js"></script>
   <script src="audio/heartbeat.js"></script>
   <script src="game.js"></script>

@@ -345,10 +345,18 @@
   // a megabyte of base64 parsed at startup, which the bumper and heartbeat only
   // get away with because they are tiny.
   const MUSIC_KEY = "nova-pachinko-music-v1";
-  const theme = document.getElementById("theme");
+  // Two beds, one soundtrack: the room's normal loop, and a faster one for the
+  // nine seconds the board is hot. Both are real <audio> files, both ride the
+  // one MUSIC slider — the board changes the tempo of the room, never its level.
+  const themeCalm = document.getElementById("theme");
+  const themeHot = document.getElementById("theme-hot");
+  const beds = {
+    calm: { el: themeCalm, level: 0, retryAt: 0 },
+    hot: { el: themeHot, level: 0, retryAt: 0, dead: false }
+  };
   let musicVolume = clamp(loadNumber(MUSIC_KEY, 0.6), 0, 1);
   let themeOn = false;
-  let themeLevel = 0;
+  let musicBed = "calm";
   let themeDuck = 1;
   let quality = qualityMode === 2 ? 0.72 : 1;
   let slowFrames = 0;
@@ -819,9 +827,15 @@
     window.addEventListener("keydown", kickTheme);
 
     document.addEventListener("visibilitychange", () => {
-      if (theme && themeOn) {
-        if (document.hidden) theme.pause();
-        else theme.play().catch(() => {});
+      if (themeOn) {
+        // Both beds, because a crossfade can be mid-flight when the tab goes
+        // away. On the way back, whatever was audible resumes where it left off.
+        for (const name of ["calm", "hot"]) {
+          const el = beds[name].el;
+          if (!el) continue;
+          if (document.hidden) el.pause();
+          else if (beds[name].level > 0.0005) el.play().catch(() => {});
+        }
       }
       if (!document.hidden) {
         lastFrame = performance.now();
@@ -5633,34 +5647,91 @@
   }
 
   function startTheme() {
-    if (!theme || themeOn) return;
+    if (themeOn) return;
+    const calm = beds.calm.el;
+    if (!calm) return;
     themeOn = true;
-    themeLevel = 0;
-    theme.volume = 0;
-    const started = theme.play();
+    beds.calm.level = 0;
+    calm.volume = 0;
+    const started = calm.play();
     if (started && typeof started.catch === "function") {
       started.catch(() => {
         // Autoplay refused without a gesture; the next one tries again.
         themeOn = false;
       });
     }
+    // Fetch the hot loop in the background now, so the first ignition does not
+    // have to wait for a download before the room can change gear. Heating the
+    // board takes a couple of dozen pin hits, so there is plenty of time.
+    primeHotBed();
   }
 
-  // An <audio> element cannot ramp its own volume, so the fade-in and the
-  // ducking both ride the frame loop.
-  function updateTheme(dt) {
-    if (!theme || !themeOn) return;
-    const target = themeTarget();
-    const next = themeLevel + (target - themeLevel) * clamp(dt * 7, 0, 1);
-    if (Math.abs(next - target) < 0.002) {
-      if (Math.abs(themeLevel - target) > 0.002) {
-        themeLevel = target;
-        theme.volume = target;
-      }
-      return;
+  function primeHotBed() {
+    const el = beds.hot.el;
+    if (!el || beds.hot.dead || el.readyState > 0) return;
+    try {
+      el.load();
+    } catch {
+      beds.hot.dead = true;
     }
-    themeLevel = next;
-    theme.volume = clamp(next, 0, 1);
+  }
+
+  // An <audio> element cannot ramp its own volume, so the fade-in, the crossfade
+  // between the two loops and the cinema ducking all ride the frame loop. The
+  // incoming bed climbs while the outgoing one falls, over roughly a second —
+  // long enough to hide that the two loops are different tempos, short enough
+  // that the board going hot still feels like it *happened*.
+  const BED_FADE = 3.2;
+
+  function updateTheme(dt) {
+    if (!themeOn) return;
+
+    // The board decides which room you are in; the slider and the cinema decide
+    // how loud it is. Neither one can move the other.
+    if (state.hot && !beds.hot.dead) musicBed = "hot";
+    else if (!state.hot) musicBed = "calm";
+
+    const base = themeTarget();
+    const now = performance.now();
+
+    for (const name of ["calm", "hot"]) {
+      const bed = beds[name];
+      const el = bed.el;
+      if (!el) continue;
+
+      const target = name === musicBed && base > 0 ? base : 0;
+      const next = bed.level + (target - bed.level) * clamp(dt * BED_FADE, 0, 1);
+      bed.level = Math.abs(next - target) < 0.002 ? target : clamp(next, 0, 1);
+      el.volume = clamp(bed.level, 0, 1);
+
+      if (target > 0 && el.paused && !(bed.retryAt && now < bed.retryAt)) {
+        const started = el.play();
+        if (started && typeof started.catch === "function") {
+          started.catch(() => {
+            // A missing or undecodable hot loop must not silence the room, and
+            // a refused play() must not kill the idea: only a real media error
+            // retires the bed, anything else gets another go in a moment.
+            if (el.error) beds.hot.dead = true;
+            else bed.retryAt = performance.now() + 1200;
+            if (name === "hot") musicBed = "calm";
+            bed.level = 0;
+            el.volume = 0;
+          });
+        }
+      }
+
+      // A bed that has faded all the way out is stopped rather than left running
+      // silently: two media elements decoding at once is real work, and the loop
+      // is meant to restart from its first bar anyway.
+      if (name !== musicBed && bed.level <= 0.0005 && !el.paused) {
+        el.pause();
+        try {
+          el.currentTime = 0;
+        } catch {
+          // Some decoders refuse a seek while paused; the loop restart is cosmetic.
+        }
+      }
+    }
   }
 
   // 1 is full, 0.35 is "something else is talking" — the cinema bed uses it.

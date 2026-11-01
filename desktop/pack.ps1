@@ -41,6 +41,9 @@ if (Test-Path $heartbeat) { Copy-Item $heartbeat (Join-Path $game 'audio\heartbe
 # Optional: the theme music, streamed from a real file rather than embedded.
 $theme = Join-Path $root 'audio\theme.mp3'
 if (Test-Path $theme) { Copy-Item $theme (Join-Path $game 'audio\theme.mp3') -Force }
+# Optional: the board-hot variant. Without it the room simply keeps its tempo.
+$themeHot = Join-Path $root 'audio\theme-hot.mp3'
+if (Test-Path $themeHot) { Copy-Item $themeHot (Join-Path $game 'audio\theme-hot.mp3') -Force }
 Copy-Item (Join-Path $here 'NovaPachinko.cmd') (Join-Path $game 'Nova Pachinko.cmd') -Force
 Copy-Item (Join-Path $here 'START-HERE.txt') (Join-Path $game 'START HERE.txt') -Force
 

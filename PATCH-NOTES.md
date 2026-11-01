@@ -164,6 +164,21 @@ spin (one tap and the receipt appears).
 The SKIP pill is still there. Nobody reaches for a pill when the thing they are
 watching is under their finger.
 
+### New: the room changes gear when the board goes hot
+
+A hot board already paid an extra token per jackpot and lit the bezel. It now
+**sounds** hot too: the nine seconds of heat are scored by a second loop at 79
+BPM against the room's 76, and the two crossfade over about a second.
+
+It is a gear change on purpose, not a seamless blend — the room should sound
+like it has taken a step towards you. The hot loop is 8 bars cut at the bar line
+(24.32 s, from 27.456 s into the track you sent), high-passed at 40 Hz like the
+main theme and tapered at the tail so the wrap does not click.
+
+Both loops ride the **one** music slider: the board changes the tempo, never the
+volume. The cinema still ducks whichever one is playing. If the file is missing,
+the room simply keeps its normal tempo instead of going quiet.
+
 ### New: parlor cosmetics
 
 Dust had one sink — forging. It has a second one now: **the room**.
