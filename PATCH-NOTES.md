@@ -110,7 +110,7 @@ The point is a reason to play the next run *differently* rather than another thi
 
 ### New: the vault says what's close
 
-One gold line above the vault filters: `LUNAR · 9/10 · 1 MORE CLOSES IT`. It names the branch you are nearest to finishing, which is the cheapest piece of progress in the game and previously the least visible.
+One gold line above the vault filters: `LUNAR · 9/10 · 1 MORE COMPLETES IT`. It names the branch you are nearest to finishing, which is the cheapest piece of progress in the game and previously the least visible.
 
 ### New: nudges and skillshots on the run card
 
