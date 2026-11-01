@@ -96,6 +96,12 @@ A friend's report: the slot row disappeared. The cause was ours — the phone la
 - The mobile toast moved to the top edge, because at the bottom it was covering the slot labels it was meant to be read above.
 - **FULL** now labels itself like AUTO and HIGH (glyph over a 6px caption) instead of spilling out of its 36px cell.
 
+### New: music
+
+The cabinet has a theme now — a 38-second loop cut from a generated track, wrapped at a bar line and checked sample-by-sample so the seam does not click. It fades in on your first click, steps back to 30% whenever the last-ball or plunge scene takes over, and pauses when you switch tabs.
+
+There is a second, **violet slider** beside the master for music level. Both sliders feed the same mute, so the speaker button still silences everything at once.
+
 ### New: save file
 
 The cabinet already saved itself — every token, pull and setting is written the moment it changes. What was missing was a way to **carry** that save.

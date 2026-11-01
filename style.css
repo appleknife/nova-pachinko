@@ -2601,3 +2601,43 @@ body.play #gameCanvas {
   letter-spacing: 0.16em;
   line-height: 1;
 }
+
+/* ── Music slider ───────────────────────────────────────────────────────────
+   Sits beside the master. Violet rather than gold so the two tracks are told
+   apart at a glance, and a little shorter so the pair still fits the HUD. */
+.music-slider {
+  --vol: 60%;
+  width: 64px;
+}
+
+.music-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    90deg,
+    rgba(173, 134, 255, 0.9) 0 var(--vol),
+    rgba(255, 255, 255, 0.13) var(--vol) 100%
+  );
+}
+
+.music-slider::-webkit-slider-thumb {
+  background: #c9aaff;
+  box-shadow: 0 0 10px rgba(173, 134, 255, 0.65);
+}
+
+.music-slider::-moz-range-progress {
+  background: rgba(173, 134, 255, 0.9);
+}
+
+.music-slider::-moz-range-thumb {
+  background: #c9aaff;
+  box-shadow: 0 0 10px rgba(173, 134, 255, 0.65);
+}
+
+@media (max-width: 860px) {
+  .volume-slider {
+    width: 52px;
+  }
+
+  .music-slider {
+    width: 44px;
+  }
+}

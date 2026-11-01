@@ -38,6 +38,9 @@ Copy-Item (Join-Path $root 'audio\bump.js') (Join-Path $game 'audio\bump.js') -F
 # Optional: without it the game falls back to a synthesised heartbeat.
 $heartbeat = Join-Path $root 'audio\heartbeat.js'
 if (Test-Path $heartbeat) { Copy-Item $heartbeat (Join-Path $game 'audio\heartbeat.js') -Force }
+# Optional: the theme music, streamed from a real file rather than embedded.
+$theme = Join-Path $root 'audio\theme.mp3'
+if (Test-Path $theme) { Copy-Item $theme (Join-Path $game 'audio\theme.mp3') -Force }
 Copy-Item (Join-Path $here 'NovaPachinko.cmd') (Join-Path $game 'Nova Pachinko.cmd') -Force
 Copy-Item (Join-Path $here 'START-HERE.txt') (Join-Path $game 'START HERE.txt') -Force
 

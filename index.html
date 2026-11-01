@@ -30,6 +30,8 @@
         <div class="audio-tools">
           <input id="volumeSlider" class="volume-slider" type="range" min="0" max="150" step="5" value="100"
             aria-label="Master volume" title="Master volume">
+          <input id="musicSlider" class="volume-slider music-slider" type="range" min="0" max="100" step="5" value="60"
+            aria-label="Music volume" title="Music volume">
           <button id="soundBtn" class="sound-btn" type="button" aria-label="Mute sound" aria-pressed="false" title="Sound (M)">
           <svg class="sound-on" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
@@ -489,6 +491,7 @@
     <div class="noscript">Nova Pachinko needs JavaScript enabled to run.</div>
   </noscript>
   <div id="announcer" class="sr-only" aria-live="polite"></div>
+  <audio id="theme" src="audio/theme.mp3" loop preload="auto"></audio>
   <script src="audio/bump.js"></script>
   <script src="audio/heartbeat.js"></script>
   <script src="game.js"></script>

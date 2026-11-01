@@ -45,6 +45,7 @@
     resetBtn: document.getElementById("resetBtn"),
     soundBtn: document.getElementById("soundBtn"),
     volumeSlider: document.getElementById("volumeSlider"),
+    musicSlider: document.getElementById("musicSlider"),
     gameOver: document.getElementById("gameOver"),
     finalChip: document.getElementById("finalBallChip"),
     finalTitle: document.getElementById("finalTitle"),
@@ -331,7 +332,18 @@
   // by ear, and down to 0 to silence without flipping mute state.
   const VOLUME_KEY = "nova-pachinko-volume-v1";
   let masterVolume = clamp(loadNumber(VOLUME_KEY, 1), 0, 1.5);
-  let quality = qualityMode === 2 ? 0.62 : 1;
+
+  // ---- Theme music ---------------------------------------------------------
+  // A real <audio> file rather than a base64 sample: a minute of music is about
+  // a megabyte of base64 parsed at startup, which the bumper and heartbeat only
+  // get away with because they are tiny.
+  const MUSIC_KEY = "nova-pachinko-music-v1";
+  const theme = document.getElementById("theme");
+  let musicVolume = clamp(loadNumber(MUSIC_KEY, 0.6), 0, 1);
+  let themeOn = false;
+  let themeLevel = 0;
+  let themeDuck = 1;
+  let quality = qualityMode === 2 ? 0.72 : 1;
   let slowFrames = 0;
   let fastFrames = 0;
   let layerScale = 0;
@@ -735,6 +747,19 @@
       });
     }
 
+    if (ui.musicSlider) {
+      ui.musicSlider.addEventListener("input", () => {
+        musicVolume = clamp(Number(ui.musicSlider.value) / 100, 0, 1);
+        updateMusicUi();
+        // Dragging it is a gesture too, so the room starts playing under your
+        // hand instead of waiting for the first ball.
+        startTheme();
+      });
+      ui.musicSlider.addEventListener("change", () => {
+        saveNumber(MUSIC_KEY, musicVolume);
+      });
+    }
+
     window.addEventListener("nova:sfx", (event) => {
       handleNovaSfx(event.detail);
     });
@@ -758,7 +783,21 @@
       applyLoadoutBonuses(event.detail);
     });
 
+    // A gesture is what lets the browser start audio; the theme waits for the
+    // first one instead of being silently blocked at load.
+    const kickTheme = () => {
+      startTheme();
+      window.removeEventListener("pointerdown", kickTheme);
+      window.removeEventListener("keydown", kickTheme);
+    };
+    window.addEventListener("pointerdown", kickTheme);
+    window.addEventListener("keydown", kickTheme);
+
     document.addEventListener("visibilitychange", () => {
+      if (theme && themeOn) {
+        if (document.hidden) theme.pause();
+        else theme.play().catch(() => {});
+      }
       if (!document.hidden) {
         lastFrame = performance.now();
         accumulator = 0;
@@ -1032,6 +1071,7 @@
     }
     if (steps === 14) accumulator = 0;
 
+    updateTheme(dt);
     updateEffects(dt * (slowMotion ? 0.55 : 1) * (1 - 0.45 * state.cinema));
     updateHeat(dt);
     updateAutoAim(dt);
@@ -4930,6 +4970,7 @@
   // stop. The cinema adds the two things the wheel does not need: air climbing
   // with the ball, and a heartbeat that stretches as the picture slows.
   function stopCinemaBed(fade = 0.16) {
+    duckTheme(1);
     const bed = cinemaBed;
     if (!bed) return;
     cinemaBed = null;
@@ -4966,6 +5007,8 @@
     const ac = ensureAudio();
     if (!ac) return;
     stopCinemaBed(0.04);
+    // The scene has its own score; the room music steps back for it.
+    duckTheme(0.3);
 
     const start = ac.currentTime;
     // Long enough to outlast the slowest plunge, and cut by the landing if the
@@ -5426,12 +5469,64 @@
   }
 
   function updateVolumeUi() {
-    if (!ui.volumeSlider) return;
-    const percent = Math.round(masterVolume * 100);
-    ui.volumeSlider.value = String(percent);
-    // The filled part of the track runs to 150, the slider's own maximum.
-    ui.volumeSlider.style.setProperty("--vol", `${(percent / 150) * 100}%`);
-    ui.volumeSlider.title = `Master volume ${percent}%`;
+    if (ui.volumeSlider) {
+      const percent = Math.round(masterVolume * 100);
+      ui.volumeSlider.value = String(percent);
+      // The filled part of the track runs to 150, the slider's own maximum.
+      ui.volumeSlider.style.setProperty("--vol", `${(percent / 150) * 100}%`);
+      ui.volumeSlider.title = `Master volume ${percent}%`;
+    }
+    updateMusicUi();
+  }
+
+  function updateMusicUi() {
+    if (!ui.musicSlider) return;
+    const percent = Math.round(musicVolume * 100);
+    ui.musicSlider.value = String(percent);
+    ui.musicSlider.style.setProperty("--vol", `${percent}%`);
+    ui.musicSlider.title = `Music volume ${percent}%`;
+  }
+
+  // What the element's volume should be right now: master × music × the duck.
+  function themeTarget() {
+    const master = state.muted ? 0 : clamp(masterVolume, 0, 1.5);
+    return clamp(master * musicVolume * themeDuck, 0, 1);
+  }
+
+  function startTheme() {
+    if (!theme || themeOn) return;
+    themeOn = true;
+    themeLevel = 0;
+    theme.volume = 0;
+    const started = theme.play();
+    if (started && typeof started.catch === "function") {
+      started.catch(() => {
+        // Autoplay refused without a gesture; the next one tries again.
+        themeOn = false;
+      });
+    }
+  }
+
+  // An <audio> element cannot ramp its own volume, so the fade-in and the
+  // ducking both ride the frame loop.
+  function updateTheme(dt) {
+    if (!theme || !themeOn) return;
+    const target = themeTarget();
+    const next = themeLevel + (target - themeLevel) * clamp(dt * 7, 0, 1);
+    if (Math.abs(next - target) < 0.002) {
+      if (Math.abs(themeLevel - target) > 0.002) {
+        themeLevel = target;
+        theme.volume = target;
+      }
+      return;
+    }
+    themeLevel = next;
+    theme.volume = clamp(next, 0, 1);
+  }
+
+  // 1 is full, 0.35 is "something else is talking" — the cinema bed uses it.
+  function duckTheme(amount) {
+    themeDuck = clamp(amount, 0, 1);
   }
 
   function toggleSound() {
