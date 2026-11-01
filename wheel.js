@@ -304,6 +304,10 @@
   const WHEEL_SIZE = 760;
   const WHEEL_RADIUS = 318;
 
+  // Declared up here, not next to its functions: updateRelicsUi() runs during
+  // init and reads this, and a `let` further down the file would be in its
+  // temporal dead zone at that moment.
+  let relicDetailId = null;
   let rimGlow = null;
 
   function rimGlowSprite() {
@@ -506,6 +510,7 @@
     loadoutCount: document.getElementById("loadoutCount"),
     loadoutSlots: document.getElementById("loadoutSlots"),
     relicGrid: document.getElementById("relicGrid"),
+    relicDetail: document.getElementById("relicDetail"),
     showcaseCount: document.getElementById("showcaseCount"),
     sparkBtn: document.getElementById("sparkBtn"),
     sparkBlock: document.querySelector(".spark-block"),
@@ -1864,6 +1869,14 @@
 
   function updateRelicsUi() {
     const unlocked = RELICS.filter(isRelicUnlocked).length;
+
+    // Keep an open detail honest: refresh it, or close it if the set just
+    // completed and the card turned back into an equip button.
+    if (relicDetailId) {
+      const open = relicById.get(relicDetailId);
+      if (!open || isRelicUnlocked(open)) closeRelicDetail();
+      else renderRelicDetail();
+    }
     el.relicProgress.textContent = `${unlocked}/8`;
     el.relicUnlockedCount.textContent = String(unlocked);
     el.loadoutCount.textContent = String(wheel.loadout.length);
@@ -1877,10 +1890,15 @@
       const isUnlocked = found >= 10;
       const equipped = wheel.loadout.includes(relic.id);
 
-      card.disabled = !isUnlocked;
+      // A locked relic used to be disabled, which meant the one thing you
+      // actually want to know — what is missing — was un-clickable.
+      card.classList.toggle("locked", !isUnlocked);
       card.classList.toggle("equipped", equipped);
-      card.setAttribute("aria-pressed", String(equipped));
-      card.title = `${relic.name} — ${branch.name}`;
+      if (isUnlocked) card.setAttribute("aria-pressed", String(equipped));
+      else card.removeAttribute("aria-pressed");
+      card.title = isUnlocked
+        ? `${relic.name} — ${branch.name}`
+        : `${relic.name} — click to see what is missing`;
 
       const state = card.querySelector(".relic-state");
       if (state) state.textContent = equipped ? "EQUIPPED" : isUnlocked ? "READY" : "LOCKED";
@@ -3024,8 +3042,30 @@
     el.relicGrid.addEventListener("click", (event) => {
       const card = event.target.closest(".relic-card");
       if (!card) return;
-      toggleRelic(card.dataset.relic);
+      const relic = relicById.get(card.dataset.relic);
+      if (!relic) return;
+      // Locked: show the ten items and what is missing. Unlocked: equip it.
+      if (!isRelicUnlocked(relic)) {
+        showRelicDetail(relic.id);
+        return;
+      }
+      closeRelicDetail();
+      toggleRelic(relic.id);
     });
+
+    if (el.relicDetail) {
+      el.relicDetail.addEventListener("click", (event) => {
+        if (event.target.closest(".relic-detail-close")) {
+          closeRelicDetail();
+          return;
+        }
+        const forge = event.target.closest("[data-forge]");
+        if (!forge) return;
+        forgeItem(forge.dataset.forge);
+        renderRelicDetail();
+        updateRelicsUi();
+      });
+    }
 
     el.passportShowcase.addEventListener("click", (event) => {
       const slot = event.target.closest(".passport-showcase-slot");
@@ -3344,14 +3384,14 @@
       if (!best || owned > best.owned) best = { branch, owned };
     }
 
-    if (!best) return "EVERY BRANCH CLOSED · THE VAULT IS YOURS";
+    if (!best) return "EVERY BRANCH COMPLETE · THE VAULT IS YOURS";
 
     if (best.owned === 0) {
       return "NOTHING DISCOVERED YET · THE FIRST PULL OPENS A BRANCH";
     }
 
     const left = 10 - best.owned;
-    return `${best.branch.short} · ${best.owned}/10 · ${left} MORE CLOSES IT`;
+    return `${best.branch.short} · ${best.owned}/10 · ${left} MORE COMPLETES IT`;
   }
 
   function updateCollectionUi() {
@@ -3926,7 +3966,7 @@
     const found = getBranchFound(item.branchId);
     if (found === 9) {
       const branch = branchById.get(item.branchId);
-      return `1 MORE CLOSES ${branch ? branch.short : "THE BRANCH"}`;
+      return `1 MORE COMPLETES ${branch ? branch.short : "THE BRANCH"}`;
     }
 
     const pair = PAIRS.find(
@@ -4605,6 +4645,95 @@
 
   function normalizeAngle(value) {
     return ((value % TAU) + TAU) % TAU;
+  }
+
+  // ---- Relic set detail ------------------------------------------------------
+  // A locked relic card was the one thing you could not click, which made "what
+  // am I missing" the hardest question in the game. Clicking it now lists all ten
+  // items of the branch, marks the ones you own, and forges a missing one if you
+  // hold ten shards of its rarity.
+  function showRelicDetail(relicId) {
+    if (!el.relicDetail) return;
+    relicDetailId = relicId;
+    renderRelicDetail();
+    el.relicDetail.hidden = false;
+    el.relicDetail.scrollIntoView({ block: "nearest" });
+  }
+
+  function closeRelicDetail() {
+    if (!el.relicDetail) return;
+    relicDetailId = null;
+    el.relicDetail.hidden = true;
+    el.relicDetail.textContent = "";
+  }
+
+  function renderRelicDetail() {
+    const relic = relicById.get(relicDetailId);
+    const box = el.relicDetail;
+    if (!relic || !box) return;
+
+    const branch = branchById.get(relic.branchId);
+    if (!branch) return;
+
+    const found = getBranchFound(relic.branchId);
+    box.textContent = "";
+    box.style.setProperty("--b-rgb", branch.rgb);
+
+    const head = document.createElement("div");
+    head.className = "relic-detail-head";
+    const title = document.createElement("strong");
+    title.textContent = `${branch.name.toUpperCase()} · ${found}/10`;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "relic-detail-close";
+    close.setAttribute("aria-label", "Close the set list");
+    close.textContent = "✕";
+    head.append(title, close);
+
+    const list = document.createElement("div");
+    list.className = "relic-detail-list";
+
+    for (const item of CATALOG) {
+      if (item.branchId !== relic.branchId) continue;
+      const rarity = rarityById.get(item.rarityId);
+      const owned = (collection[item.id] || 0) > 0;
+
+      const row = document.createElement("div");
+      row.className = `relic-detail-row${owned ? " owned" : ""}`;
+
+      const tag = document.createElement("span");
+      tag.className = "relic-detail-rarity";
+      if (rarity) tag.style.color = `rgb(${rarity.rgb})`;
+      tag.textContent = rarity ? rarity.short : "";
+
+      const name = document.createElement("strong");
+      name.textContent = item.name;
+      row.append(tag, name);
+
+      if (owned) {
+        const tick = document.createElement("span");
+        tick.className = "relic-detail-state";
+        tick.textContent = "✓";
+        row.appendChild(tick);
+      } else if (canForge(item)) {
+        const forge = document.createElement("button");
+        forge.type = "button";
+        forge.className = "relic-detail-forge";
+        forge.dataset.forge = item.id;
+        forge.textContent = `FORGE · ${FORGE_COST} ◆`;
+        row.appendChild(forge);
+      } else {
+        const shards = wheel.shards[item.rarityId] || 0;
+        const missing = document.createElement("span");
+        missing.className = "relic-detail-state";
+        missing.textContent = `${shards}/${FORGE_COST} ◆`;
+        row.appendChild(missing);
+      }
+
+      list.appendChild(row);
+    }
+
+    box.append(head, list);
   }
 
   function loadStringArray(key) {

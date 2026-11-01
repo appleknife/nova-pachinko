@@ -96,6 +96,12 @@ A friend's report: the slot row disappeared. The cause was ours — the phone la
 - The mobile toast moved to the top edge, because at the bottom it was covering the slot labels it was meant to be read above.
 - **FULL** now labels itself like AUTO and HIGH (glyph over a 6px caption) instead of spilling out of its 36px cell.
 
+### New: click a relic to see what it needs
+
+The relic tab told you `9/10 · 1 TO GO` and nothing else, and a locked card was disabled so you could not ask. Now **click a locked relic** and it opens the ten items of that branch: the ones you own ticked, each missing one showing either a gold **FORGE · 10 ◆** button (if you hold ten shards of its rarity) or how many you have. Forging from there completes the set, unlocks the relic and closes the panel.
+
+The wording went with it: `1 MORE COMPLETES LUNAR`, not "closes".
+
 ### New: contracts
 
 A goal for the run, offered before you drop: `LAND 2 JACKPOTS`, `BUILD A ×3 CHAIN`, `CLEAR 25,000` (scaled to 75% of your best) or `NUDGE ONE INTO THE JACKPOT`. The ↻ cycles the offer while you still have all your balls. Meet it and **the pot pays double at cash-out**; the strip turns teal and says so. Ignore it and nothing changes.
