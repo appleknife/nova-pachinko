@@ -3890,6 +3890,34 @@
     };
   }
 
+  // Goal-gradient in one line: say the nearest goal out loud, at the moment it
+  // moves. The numbers were always here; nobody was pointing at them, and effort
+  // is strongest in the last step (Kivetz et al. 2006).
+  function proximityNote(item) {
+    if (!item) return "";
+
+    const found = getBranchFound(item.branchId);
+    if (found === 9) {
+      const branch = branchById.get(item.branchId);
+      return `1 MORE CLOSES ${branch ? branch.short : "THE BRANCH"}`;
+    }
+
+    const pair = PAIRS.find(
+      (entry) => entry.branchId === item.branchId && entry.rarityId === item.rarityId
+    );
+    if (pair && pair.ids.filter((id) => (collection[id] || 0) > 0).length === 1) {
+      return "ONE MORE COMPLETES THIS PAIR";
+    }
+
+    const shards = wheel.shards[item.rarityId] || 0;
+    if (shards === FORGE_COST - 1 || shards === FORGE_COST - 2) {
+      const left = FORGE_COST - shards;
+      return `${left} SHARD${left === 1 ? "" : "S"} TO FORGE`;
+    }
+
+    return "";
+  }
+
   // The card, the ladder and the counters: what a player reads after a pull.
   function presentResult(result, animate = true) {
     el.rewardRarity.style.color = "";
@@ -3950,6 +3978,9 @@
         pairCount === 1 ? "" : "s"
       } · best ${best.rarity.name} ${best.item.name}`;
 
+    const nearGoal = proximityNote(best.item);
+    if (nearGoal) el.wheelStatus.textContent += ` · ${nearGoal}`;
+
     pulseHaptic(
       best.rarity.rank >= 4
         ? [0, 22, 26, 48, 34, 120]
@@ -3989,6 +4020,17 @@
     if (best.rarity.rank >= 3) {
       if (!REDUCED_MOTION) spawnRevealBurst(best.rarity.rgb, best.rarity.rank);
       flashRarity(best.rarity);
+    }
+
+    // A batch that landed something worth the tokens gets a second beat. The
+    // ceremony should match the stake (CHI '22), and a 72-token dump was getting
+    // the same reveal as a single spin.
+    if (best.rarity.rank >= 4 || relicCount > 0) {
+      window.setTimeout(() => {
+        if (!wheel.open) return;
+        if (!REDUCED_MOTION) spawnRevealBurst(best.rarity.rgb, best.rarity.rank);
+        flashRarity(best.rarity);
+      }, 340);
     }
 
     showBatchList(results);
@@ -4048,6 +4090,9 @@
       : `Duplicate secured: +${dustGain} Nova Dust, +${shardGain} ${rarity.name} shard${
           shardGain === 1 ? "" : "s"
         }.${mastery > previousMastery ? ` Mastery ${mastery} reached.` : ""} ${item.name} is now ×${count}.`;
+
+    const nearGoal = proximityNote(item);
+    if (nearGoal) el.wheelStatus.textContent += ` · ${nearGoal}`;
 
     pulseHaptic(
       rarity.rank >= 4

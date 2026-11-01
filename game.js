@@ -1628,6 +1628,19 @@
       sfxPocket(slot.value);
     }
 
+    // Two moments that are the player's doing rather than the board's.
+    if (!slot.jackpot) {
+      if (ball.nudged && Math.abs(slot.index - JACKPOT_SLOT.index) === 1) {
+        showSoClose(slot);
+      } else if (
+        !ball.nudged &&
+        ball.calledSlot === slot.index &&
+        (slot.value >= 500 || slot.bonus)
+      ) {
+        showCalledIt(slot);
+      }
+    }
+
     // An encore ball gets one more go: unless it just found the jackpot, it
     // comes back to the chute and drops again, free, once.
     if (ball.type === "encore" && !slot.jackpot && !ball.encoreUsed) {
@@ -1769,6 +1782,7 @@
     state.nudges += 1;
 
     for (const ball of live) {
+      ball.nudged = true;
       // Credit only counts if the knock changed the answer, so the counterfactual
       // is run twice: where this ball was already going, and where it is going
       // now. A knock that does not flip the prediction into the jackpot is just
@@ -1796,6 +1810,40 @@
     }
     sfxNudge(dir);
     haptic(14);
+  }
+
+  // A knock that left the ball one pocket short. Near-misses only help when the
+  // player had a hand in them — Clark et al. (Neuron 2009) found computer-chosen
+  // near-misses actively *reduce* the desire to keep playing — so this fires only
+  // on a ball a nudge actually touched.
+  function showSoClose(slot) {
+    addFloatingText(slot.center, SLOT_TOP - 86, "SO CLOSE", C.gold, 20, 1.6);
+    showGameToast("SO CLOSE · THE JACKPOT WAS ONE POCKET AWAY");
+    JACKPOT_SLOT.flash = Math.max(JACKPOT_SLOT.flash || 0, 0.8);
+    sfxSoClose();
+    haptic(16);
+  }
+
+  // Aimed and landed, untouched. The other half of the skill story: SKILLSHOT is
+  // the rescue, this is the read.
+  function showCalledIt(slot) {
+    addFloatingText(slot.center, SLOT_TOP - 92, "CALLED IT", C.cyan, 20, 1.6);
+    showGameToast("CALLED IT · AIMED AND LANDED");
+    sfxCalledIt();
+    haptic(14);
+  }
+
+  // Soft, not a taunt: two notes falling a third, quiet enough to sit under the
+  // pocket sound it arrives with.
+  function sfxSoClose() {
+    tone(523, 0.22, "sine", 0.018, 494, 0, 0, 0.24);
+    tone(392, 0.34, "sine", 0.014, 370, 0, 0.12, 0.3);
+  }
+
+  // Rising, small, quick: the sound of being right.
+  function sfxCalledIt() {
+    tone(523, 0.12, "triangle", 0.016, 523, 0, 0, 0.16);
+    tone(784, 0.26, "triangle", 0.013, 784, 0, 0.1, 0.24);
   }
 
   // The one moment worth shouting about: a ball the board had already given up
@@ -2217,6 +2265,10 @@
       // Set when a knock changed where this ball was already heading, cleared
       // by the next knock if that one turns out to be the decisive one.
       skillshotAt: 0,
+      // The lane the chute was over when the ball was let go, and whether a
+      // knock ever touched it — together these decide CALLED IT and SO CLOSE.
+      calledSlot: -1,
+      nudged: false,
       chainHits: 0,
       hitPegs: new Set(),
       trail: []
@@ -2244,6 +2296,10 @@
     const margin = radius + 12;
     const spawnX = clamp(state.aimX, PLAY.left + margin, PLAY.right - margin);
     const ball = makeBall(spawnX, type);
+    // Where the player was pointing when they let go. If the ball lands in that
+    // lane untouched, that was a read, not luck.
+    const called = slotAt(state.aimX);
+    ball.calledSlot = called ? called.index : -1;
 
     if (type !== "standard") {
       state.deck[type] = Math.max(0, (state.deck[type] || 0) - 1);
