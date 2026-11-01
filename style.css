@@ -2662,3 +2662,67 @@ body.play #gameCanvas {
 .vol-field .volume-slider {
   height: 26px;
 }
+
+/* ── Run contract ───────────────────────────────────────────────────────────
+   One line, under the drop controls: the goal for this run, how close you are,
+   and a roll button that only exists before the first ball. */
+.contract-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 214, 138, 0.22);
+  border-radius: 11px;
+  background: rgba(255, 199, 95, 0.06);
+}
+
+.contract-row[hidden] {
+  display: none;
+}
+
+.contract-kicker {
+  color: #b9924a;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+#contractText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #ffe3aa;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.contract-row.met {
+  border-color: rgba(77, 245, 221, 0.4);
+  background: rgba(77, 245, 221, 0.08);
+}
+
+.contract-row.met #contractText {
+  color: #9ff7e9;
+}
+
+.contract-roll {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 226, 168, 0.3);
+  border-radius: 7px;
+  color: #ffd68a;
+  background: rgba(255, 199, 95, 0.08);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.contract-roll[hidden] {
+  display: none;
+}

@@ -152,6 +152,13 @@
         </button>
       </div>
 
+      <div id="contractRow" class="contract-row" hidden>
+        <span class="contract-kicker">CONTRACT</span>
+        <strong id="contractText">—</strong>
+        <button id="contractRoll" class="contract-roll" type="button"
+          aria-label="Offer a different contract" title="Offer a different contract">↻</button>
+      </div>
+
       <div class="nudge-row" role="group" aria-label="Nudge the cabinet">
         <button id="nudgeLeftBtn" class="nudge-btn idle" type="button"
           aria-label="Nudge the board left" title="Nudge the board left (←)">
@@ -385,6 +392,7 @@
               </div>
             </div>
           </header>
+          <p id="vaultNearest" class="vault-nearest"></p>
           <div id="vaultFilters" class="vault-filters" aria-label="Filter vault by branch"></div>
           <div id="vaultRarity" class="vault-rarity" aria-label="Filter vault by rarity"></div>
           <div id="vaultShards" class="shard-strip" aria-label="Rarity shards. Ten of one rarity forges any locked item of that rarity."></div>

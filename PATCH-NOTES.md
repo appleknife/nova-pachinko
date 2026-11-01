@@ -96,6 +96,20 @@ A friend's report: the slot row disappeared. The cause was ours — the phone la
 - The mobile toast moved to the top edge, because at the bottom it was covering the slot labels it was meant to be read above.
 - **FULL** now labels itself like AUTO and HIGH (glyph over a 6px caption) instead of spilling out of its 36px cell.
 
+### New: contracts
+
+A goal for the run, offered before you drop: `LAND 2 JACKPOTS`, `BUILD A ×3 CHAIN`, `CLEAR 25,000` (scaled to 75% of your best) or `NUDGE ONE INTO THE JACKPOT`. The ↻ cycles the offer while you still have all your balls. Meet it and **the pot pays double at cash-out**; the strip turns teal and says so. Ignore it and nothing changes.
+
+The point is a reason to play the next run *differently* rather than another thing to collect — and the progress sits on the strip (`0/2`, `×2/×3`) because effort accelerates as a goal gets close.
+
+### New: the vault says what's close
+
+One gold line above the vault filters: `LUNAR · 9/10 · 1 MORE CLOSES IT`. It names the branch you are nearest to finishing, which is the cheapest piece of progress in the game and previously the least visible.
+
+### New: nudges and skillshots on the run card
+
+`NUDGES` and `SKILLSHOTS` are now two of the six stat tiles, so a run that was won by hand reads that way on the card.
+
 ### New: music
 
 The cabinet has a theme now — a 38-second loop cut from a generated track, wrapped at a bar line and checked sample-by-sample so the seam does not click. It fades in on your first click, steps back to 30% whenever the last-ball or plunge scene takes over, and pauses when you switch tabs.

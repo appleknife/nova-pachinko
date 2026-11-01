@@ -35,6 +35,9 @@
     railNudgeLeft: document.getElementById("railNudgeLeft"),
     railNudgeRight: document.getElementById("railNudgeRight"),
     playBtn: document.getElementById("playBtn"),
+    contractRow: document.getElementById("contractRow"),
+    contractText: document.getElementById("contractText"),
+    contractRoll: document.getElementById("contractRoll"),
     playBar: document.getElementById("playBar"),
     playDrop: document.getElementById("playDrop"),
     playNudgeLeft: document.getElementById("playNudgeLeft"),
@@ -208,7 +211,7 @@
     // tokensEarned is what the jackpots minted; tokensBanked is what actually
     // reached the wallet, which includes everything a plunge doubled. The run
     // card shows the second one, because that is the number the player earned.
-    runStats: { jackpots: 0, tokensEarned: 0, tokensBanked: 0, bestChain: 0, doubles: 0, peakPot: 0 },
+    runStats: { jackpots: 0, tokensEarned: 0, tokensBanked: 0, bestChain: 0, doubles: 0, peakPot: 0, skillshots: 0 },
     score: 0,
     best: loadNumber("nova-pachinko-best-v1", 0),
     runBestStart: 0,
@@ -250,6 +253,10 @@
     // any moment, so the pot is never at risk; a plunge only ever decides how
     // much bigger it gets.
     pot: 0,
+    // One optional goal per run, picked before the first drop; meeting it doubles
+    // what the pot pays at cash-out.
+    contract: null,
+    contractRoll: 0,
     // Everything the wheel handed over during this run, for the run card.
     runLoot: [],
     deck: { ...DECK_START },
@@ -378,6 +385,7 @@
   }
   updateSoundButton();
   updateVolumeUi();
+  refreshContract();
   updateQualityUi();
   updateAutoButton();
   buildDeck();
@@ -595,6 +603,13 @@
       });
     }
 
+    if (ui.contractRoll) {
+      ui.contractRoll.addEventListener("click", () => {
+        rollContract();
+        ui.contractRoll.blur();
+      });
+    }
+
     if (ui.playBtn) ui.playBtn.addEventListener("click", () => setPlayMode(true));
     if (ui.playExit) {
       ui.playExit.addEventListener("click", () => {
@@ -690,6 +705,8 @@
           minted: state.runStats.tokensEarned,
           doubles: state.runStats.doubles,
           peakPot: state.runStats.peakPot,
+          nudges: state.nudges,
+          skillshots: state.runStats.skillshots,
           chain: Math.min(5, 1 + Math.floor(state.runStats.bestChain / chainStep)),
           // Rarest first: a card with a mythic on it should lead with it.
           loot: [...state.runLoot].sort(
@@ -1657,7 +1674,10 @@
 
       // The knock is why it is here: before the bump this ball's own path was
       // heading somewhere else.
-      if (ball.skillshotAt) showSkillshot();
+      if (ball.skillshotAt) {
+        state.runStats.skillshots += 1;
+        showSkillshot();
+      }
     } else if (slot.bonus) {
       state.flash = 0.08;
       state.flashColor = C.violet;
@@ -2140,8 +2160,14 @@
   }
 
   function bankPot(source) {
-    const amount = state.pot;
+    let amount = state.pot;
     if (amount <= 0) return 0;
+
+    // A met contract doubles what the pot pays. It applies to the whole payout
+    // rather than to the minted base, because "double your tokens" is the promise
+    // the strip makes while you are playing.
+    const doubled = Boolean(state.contract && state.contract.met);
+    if (doubled) amount *= 2;
 
     state.pot = 0;
     updatePotUi();
@@ -2149,6 +2175,7 @@
     if (window.NovaWheel && typeof window.NovaWheel.awardToken === "function") {
       window.NovaWheel.awardToken(amount, source || "banked");
     }
+    if (doubled) showGameToast(`CONTRACT MET · ${amount} TOKENS PAID`);
     return amount;
   }
 
@@ -2634,7 +2661,8 @@
 
     state.status = "ready";
     state.started = false;
-    state.runStats = { jackpots: 0, tokensEarned: 0, tokensBanked: 0, bestChain: 0, doubles: 0, peakPot: 0 };
+    state.runStats = { jackpots: 0, tokensEarned: 0, tokensBanked: 0, bestChain: 0, doubles: 0, peakPot: 0, skillshots: 0 };
+    refreshContract();
     state.runLoot = [];
     state.score = 0;
     state.runBestStart = state.best;
@@ -2698,7 +2726,101 @@
     if (state.auto) scheduleAutoDrop(520);
   }
 
+  // ---- Run contracts ---------------------------------------------------------
+  // One optional goal per run, picked before the first ball; meeting it doubles
+  // what the pot pays at cash-out. Choice of goal is the autonomy lever, a skill
+  // target rather than a grind is the competence one, and the progress line is
+  // the goal-gradient — all three are in the research, and none of them needs a
+  // new currency.
+  function contractOffers() {
+    const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+    const scoreTarget = Math.max(25000, Math.round((state.best * 0.75) / 5000) * 5000);
+    return [
+      { id: "jackpots", need: 2, text: "LAND 2 JACKPOTS" },
+      { id: "chain", need: chainStep * 2, text: "BUILD A ×3 CHAIN" },
+      { id: "score", need: scoreTarget, text: `CLEAR ${scoreTarget.toLocaleString("en-US")}` },
+      { id: "skillshot", need: 1, text: "NUDGE ONE INTO THE JACKPOT" }
+    ];
+  }
+
+  function refreshContract() {
+    const offers = contractOffers();
+    const offer = offers[(state.contractRoll || 0) % offers.length];
+    state.contract = { ...offer, met: false };
+    updateContractUi();
+  }
+
+  function contractProgress() {
+    const contract = state.contract;
+    if (!contract) return 0;
+    if (contract.id === "jackpots") return state.runStats.jackpots;
+    if (contract.id === "chain") return state.runStats.bestChain;
+    if (contract.id === "score") return state.score;
+    if (contract.id === "skillshot") return state.runStats.skillshots;
+    return 0;
+  }
+
+  function rollContract() {
+    if (state.started) return;
+    state.contractRoll = (state.contractRoll || 0) + 1;
+    refreshContract();
+    showGameToast("CONTRACT CHANGED · MEET IT TO DOUBLE THE POT");
+  }
+
+  function contractLine(contract) {
+    if (contract.met) return "MET · POT PAYS DOUBLE";
+    if (!state.started) return contract.text;
+
+    if (contract.id === "jackpots") {
+      const got = Math.min(contract.need, state.runStats.jackpots);
+      return `${contract.text} · ${got}/${contract.need}`;
+    }
+    if (contract.id === "chain") {
+      const chainStep = Math.max(2, Math.floor(bonuses.chainStep) || 5);
+      const mult = Math.min(5, 1 + Math.floor(state.runStats.bestChain / chainStep));
+      return `${contract.text} · ×${mult}`;
+    }
+    if (contract.id === "score") {
+      return `${contract.text} · ${formatScore(Math.min(contract.need, state.score))}`;
+    }
+    return contract.text;
+  }
+
+  function updateContractUi() {
+    if (!ui.contractRow) return;
+    const contract = state.contract;
+    if (!contract) {
+      ui.contractRow.hidden = true;
+      return;
+    }
+
+    ui.contractRow.hidden = false;
+    ui.contractRow.classList.toggle("met", contract.met);
+    const line = contractLine(contract);
+    if (ui.contractText.textContent !== line) ui.contractText.textContent = line;
+    if (ui.contractRoll) ui.contractRoll.hidden = state.started;
+  }
+
+  function checkContract() {
+    const contract = state.contract;
+    if (!contract || contract.met) return;
+    if (contractProgress() < contract.need) return;
+
+    contract.met = true;
+    showGameToast("CONTRACT MET · THE POT PAYS DOUBLE");
+    sfxContract();
+    haptic([0, 20, 30, 50]);
+  }
+
+  // Bright but short: two rising notes for a job done, not a fanfare.
+  function sfxContract() {
+    tone(659, 0.16, "triangle", 0.02, 659, 0, 0, 0.2);
+    tone(988, 0.34, "triangle", 0.016, 988, 0, 0.09, 0.28);
+  }
+
   function updateHud(force) {
+    checkContract();
+    updateContractUi();
     setText(ui.score, formatScore(state.score), force);
     setText(ui.best, formatScore(state.best), force);
     setText(ui.balls, String(state.ballsLeft), force);

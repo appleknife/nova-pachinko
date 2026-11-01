@@ -3673,3 +3673,17 @@
     -webkit-line-clamp: 3;
   }
 }
+
+/* The one line that says what the vault is waiting for. Gold, so it reads as
+   an invitation rather than as another filter label. */
+.vault-nearest {
+  margin: 0 0 8px;
+  color: #ffd386;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.vault-nearest:empty {
+  display: none;
+}

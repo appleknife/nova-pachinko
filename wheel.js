@@ -543,6 +543,7 @@
     skyCanvas: document.getElementById("skyCanvas"),
     skyCaption: document.getElementById("skyCaption"),
     vaultPairs: document.getElementById("vaultPairs"),
+    vaultNearest: document.getElementById("vaultNearest"),
     viewGrid: document.getElementById("viewGrid"),
     viewSky: document.getElementById("viewSky"),
     vaultGrid: document.getElementById("vaultGrid"),
@@ -2696,11 +2697,14 @@
       ["JACKPOTS", String(data.jackpots || 0)],
       ["NOVA TOKENS", String(data.tokens || 0)],
       ["BEST CHAIN", data.chain ? `×${data.chain}` : "×1"],
-      ["VAULT PULLS", String((data.loot || []).length)]
+      ["VAULT PULLS", String((data.loot || []).length)],
+      ["NUDGES", String(data.nudges || 0)],
+      ["SKILLSHOTS", String(data.skillshots || 0)]
     ];
-    const statW = (W - 172 - 3 * 16) / 4;
+    const statGap = 12;
+    const statW = (W - 172 - (stats.length - 1) * statGap) / stats.length;
     stats.forEach(([label, value], index) => {
-      const x = 86 + index * (statW + 16);
+      const x = 86 + index * (statW + statGap);
       ctx.fillStyle = "rgba(5, 8, 18, 0.45)";
       ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
       ctx.lineWidth = 1;
@@ -3328,12 +3332,35 @@
     el.pityBlock.classList.toggle("ready", guaranteedNext);
   }
 
+  // Curiosity and proximity are the two levers with the best evidence behind
+  // them (curiosity was the strongest predictor of voluntary playtime in the
+  // CHI '24 study), and the vault already holds both numbers. So it says the
+  // cheapest piece of progress out loud instead of leaving it to be discovered.
+  function nearestVaultGoal() {
+    let best = null;
+    for (const branch of BRANCHES) {
+      const owned = getBranchFound(branch.id);
+      if (owned >= 10) continue;
+      if (!best || owned > best.owned) best = { branch, owned };
+    }
+
+    if (!best) return "EVERY BRANCH CLOSED · THE VAULT IS YOURS";
+
+    if (best.owned === 0) {
+      return "NOTHING DISCOVERED YET · THE FIRST PULL OPENS A BRANCH";
+    }
+
+    const left = 10 - best.owned;
+    return `${best.branch.short} · ${best.owned}/10 · ${left} MORE CLOSES IT`;
+  }
+
   function updateCollectionUi() {
     const found = countFoundItems();
     const collectedLabel = `${found}/${TOTAL_ITEMS}`;
 
     el.vaultFound.textContent = String(found);
     el.vaultProgress.textContent = collectedLabel;
+    if (el.vaultNearest) el.vaultNearest.textContent = nearestVaultGoal();
 
     for (const item of CATALOG) {
       const count = collection[item.id] || 0;
