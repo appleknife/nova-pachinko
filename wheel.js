@@ -482,7 +482,9 @@
     showcaseCustom: "nova-pachinko-showcase-custom-v1",
     spark: "nova-pachinko-spark-v1",
     shards: "nova-pachinko-shards-v1",
-    vaultView: "nova-pachinko-vault-view-v1"
+    vaultView: "nova-pachinko-vault-view-v1",
+    parlor: "nova-pachinko-parlor-v1",
+    parlorActive: "nova-pachinko-theme-v1"
   };
 
   const el = {
@@ -549,6 +551,8 @@
     skyCaption: document.getElementById("skyCaption"),
     vaultPairs: document.getElementById("vaultPairs"),
     vaultNearest: document.getElementById("vaultNearest"),
+    parlorGrid: document.getElementById("parlorGrid"),
+    parlorNote: document.getElementById("parlorNote"),
     viewGrid: document.getElementById("viewGrid"),
     viewSky: document.getElementById("viewSky"),
     vaultGrid: document.getElementById("vaultGrid"),
@@ -2836,6 +2840,163 @@
     );
   }
 
+  // ---- Parlor ---------------------------------------------------------------
+  // Cosmetics, and the second thing Dust is for. Self-expression is the autonomy
+  // half of the SDT story, and Dust had exactly one sink. A parlor theme changes
+  // the room and the cabinet's frame — never a rarity colour, a slot colour or a
+  // payout, so it cannot make the game harder to read.
+  const PARLOR = [
+    {
+      id: "nova",
+      name: "NOVA STANDARD",
+      price: 0,
+      swatch: ["#3b2a63", "#ff546c", "#30ebd4"],
+      palette: {
+        room: ["rgba(103, 72, 255, 0.2)", "rgba(255, 84, 108, 0.13)", "rgba(48, 235, 212, 0.08)"],
+        base: ["#070b17", "#04060d", "#02040a"],
+        orbs: ["104, 69, 255", "255, 64, 92", "0, 215, 196"],
+        frame: ["#292a4b", "#15182c", "#0b0e1b", "#24213b"],
+        marquee: ["#1b1a34", "#0a0d1c"]
+      }
+    },
+    {
+      id: "dusk",
+      name: "NEON DUSK",
+      price: 60,
+      swatch: ["#4a1c3c", "#ff7a4d", "#ff3d77"],
+      palette: {
+        room: ["rgba(255, 84, 160, 0.2)", "rgba(255, 140, 70, 0.13)", "rgba(130, 60, 210, 0.09)"],
+        base: ["#180818", "#0c040c", "#060206"],
+        orbs: ["255, 84, 160", "255, 140, 70", "130, 60, 210"],
+        frame: ["#4d2742", "#2b1526", "#190c16", "#3f1f33"],
+        marquee: ["#32152c", "#160a13"]
+      }
+    },
+    {
+      id: "mint",
+      name: "COLD STORAGE",
+      price: 120,
+      swatch: ["#123a40", "#5ff0d0", "#7fb8ff"],
+      palette: {
+        room: ["rgba(60, 210, 190, 0.18)", "rgba(80, 150, 255, 0.14)", "rgba(20, 90, 120, 0.12)"],
+        base: ["#04100f", "#020809", "#010405"],
+        orbs: ["60, 210, 190", "80, 150, 255", "20, 90, 120"],
+        frame: ["#1e4045", "#122629", "#0a1416", "#1b3a40"],
+        marquee: ["#0f2b2d", "#071415"]
+      }
+    },
+    {
+      id: "ember",
+      name: "EMBER PARLOR",
+      price: 200,
+      swatch: ["#4a2410", "#ffb057", "#ff5e3a"],
+      palette: {
+        room: ["rgba(255, 150, 60, 0.2)", "rgba(255, 80, 50, 0.14)", "rgba(120, 60, 20, 0.12)"],
+        base: ["#150a05", "#0b0502", "#050201"],
+        orbs: ["255, 150, 60", "255, 80, 50", "120, 60, 20"],
+        frame: ["#4a2b18", "#2a1810", "#170d08", "#3d2314"],
+        marquee: ["#2e1a0e", "#150b06"]
+      }
+    }
+  ];
+
+  let parlorOwned = loadStringArray(STORAGE.parlor);
+  if (!parlorOwned.length) parlorOwned = ["nova"];
+  let activeParlor = window.localStorage.getItem(STORAGE.parlorActive) || "nova";
+
+  function parlorById(id) {
+    return PARLOR.find((entry) => entry.id === id) || PARLOR[0];
+  }
+
+  function buildParlor() {
+    const grid = el.parlorGrid;
+    if (!grid) return;
+    grid.textContent = "";
+
+    for (const theme of PARLOR) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "parlor-card";
+      card.dataset.parlor = theme.id;
+
+      const swatch = document.createElement("span");
+      swatch.className = "parlor-swatch";
+      swatch.style.background = `linear-gradient(135deg, ${theme.swatch[0]}, ${theme.swatch[1]} 55%, ${theme.swatch[2]})`;
+
+      const name = document.createElement("strong");
+      name.textContent = theme.name;
+
+      const state = document.createElement("em");
+      state.className = "parlor-state";
+
+      card.append(swatch, name, state);
+      grid.appendChild(card);
+    }
+
+    updateParlorUi();
+  }
+
+  function updateParlorUi() {
+    const grid = el.parlorGrid;
+    if (!grid) return;
+
+    for (const card of grid.querySelectorAll(".parlor-card")) {
+      const theme = parlorById(card.dataset.parlor);
+      const owned = parlorOwned.includes(theme.id);
+      const active = activeParlor === theme.id;
+      const affordable = wheel.dust >= theme.price;
+
+      card.classList.toggle("active", active);
+      card.classList.toggle("unaffordable", !owned && !affordable);
+      card.setAttribute("aria-pressed", String(active));
+
+      const state = card.querySelector(".parlor-state");
+      if (state) state.textContent = active ? "ACTIVE" : owned ? "OWNED" : `${theme.price} ◆`;
+      card.title = active
+        ? `${theme.name} — in use`
+        : owned
+          ? `${theme.name} — click to apply`
+          : `${theme.name} — ${theme.price} Dust`;
+    }
+
+    if (el.parlorNote) {
+      const active = parlorById(activeParlor);
+      el.parlorNote.textContent = `${active.name} · ${wheel.dust.toLocaleString("en-US")} DUST`;
+    }
+  }
+
+  function applyParlor(id, persist = true) {
+    const theme = parlorById(id);
+    activeParlor = theme.id;
+    if (persist) window.localStorage.setItem(STORAGE.parlorActive, theme.id);
+    // The board owns the room and the cabinet, so it applies the palette.
+    window.dispatchEvent(new CustomEvent("nova:theme", { detail: theme.palette }));
+    updateParlorUi();
+  }
+
+  function chooseParlor(id) {
+    const theme = parlorById(id);
+
+    if (parlorOwned.includes(theme.id)) {
+      applyParlor(theme.id);
+      return;
+    }
+
+    if (wheel.dust < theme.price) {
+      showToast(`NEED ${theme.price} DUST · DUPLICATES PAY`, "");
+      return;
+    }
+
+    wheel.dust -= theme.price;
+    saveNumber(STORAGE.dust, wheel.dust);
+    parlorOwned.push(theme.id);
+    saveStringArray(STORAGE.parlor, parlorOwned);
+    updateWalletUi();
+    applyParlor(theme.id);
+    showToast(`${theme.name} · PARLOR CHANGED`, "gold");
+    dispatchSfx("forge");
+  }
+
   // ---- Save file ------------------------------------------------------------
   // The cabinet already saves itself to localStorage on every change; this is the
   // other half of the job — a file that carries that state to another browser,
@@ -3090,6 +3251,14 @@
     el.copyCodeBtn.addEventListener("click", copyCollectionCode);
     el.copyCodeBtn2.addEventListener("click", copyCollectionCode);
     el.compareBtn.addEventListener("click", compareFriendVault);
+
+    if (el.parlorGrid) {
+      el.parlorGrid.addEventListener("click", (event) => {
+        const card = event.target.closest(".parlor-card");
+        if (!card) return;
+        chooseParlor(card.dataset.parlor);
+      });
+    }
 
     if (el.saveFileBtn) el.saveFileBtn.addEventListener("click", downloadSave);
     if (el.loadFileBtn && el.loadFileInput) {
@@ -4823,4 +4992,11 @@
   function clamp(value, min, max) {
     return value < min ? min : value > max ? max : value;
   }
+
+  // The parlor is opened last on purpose: the PARLOR table and its saved state
+  // are `const`/`let` declared above this line, and the init block earlier in
+  // the file would hit their temporal dead zone. (That is the same trap the
+  // handoff warns about; it has now cost two builds.)
+  buildParlor();
+  applyParlor(activeParlor, false);
 })();

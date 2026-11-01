@@ -102,6 +102,7 @@ Every rate below is shown in-game too, under **FULL ODDS** in the wheel: the sam
 
 - **Mastery:** an item gains mastery at 1, 2, 3, 5, and 8 copies. Each level adds to Vault Power.
 - **Dust:** duplicate rewards grant Dust based on rarity: 4 / 10 / 25 / 60 / 150 for Common through Mythic.
+- **Parlor themes:** Dust also buys the room. Four skins for the cabinet and the space behind it — NOVA STANDARD (free), NEON DUSK (60 ◆), COLD STORAGE (120 ◆), EMBER PARLOR (200 ◆) — bought and swapped under **PASSPORT · PARLOR**. A theme repaints the frame, the nameplate, the room light and the ambient orbs, and deliberately never touches a rarity colour, a slot colour or a payout, so it can never make a pull harder to read. Swapping between owned themes is free.
 - **Showcase:** click discovered Vault cards to choose up to three favorites for the passport. A showcased card is marked where you can see it — gold edge, gold wash, and a `★ 1/2/3` chip telling you which passport slot it sits in — and the `★ SHOWCASE` filter at the head of the branch row shows just those three, so you never have to hunt an eighty-card wall for the thing you pinned last week. The passport's slots work in both directions: click a filled one to take that piece off, click an empty one to jump to the Vault.
 - **Titles:** collection progress unlocks titles from Rookie Curator to Vault Sovereign.
 
@@ -129,6 +130,7 @@ The passport tab includes:
 - A generated PNG collection card suitable for sharing
 - Favorite showcase items, rarest relic, Vault Power, best run, title, branch progress, and equipped relics
 - A compact collection code that a friend can paste into their own cabinet to compare discovered counts, Vault Power, and unique relics
+- Parlor room skins bought with Dust (see *Collection depth*)
 
 All sharing works locally; there is no account or server.
 

@@ -112,7 +112,7 @@ body::after {
   height: 56vw;
   left: -4%;
   top: -10%;
-  background: radial-gradient(circle, rgba(104, 69, 255, 0.3), rgba(104, 69, 255, 0.09) 45%, rgba(104, 69, 255, 0) 72%);
+  background: radial-gradient(circle, rgba(var(--orb-a, 104, 69, 255), 0.3), rgba(var(--orb-a, 104, 69, 255), 0.09) 45%, rgba(var(--orb-a, 104, 69, 255), 0) 72%);
 }
 
 .ambient-orb-b {
@@ -120,7 +120,7 @@ body::after {
   height: 50vw;
   right: -4%;
   bottom: -12%;
-  background: radial-gradient(circle, rgba(255, 64, 92, 0.22), rgba(255, 64, 92, 0.06) 45%, rgba(255, 64, 92, 0) 72%);
+  background: radial-gradient(circle, rgba(var(--orb-b, 255, 64, 92), 0.22), rgba(var(--orb-b, 255, 64, 92), 0.06) 45%, rgba(var(--orb-b, 255, 64, 92), 0) 72%);
   animation-delay: -7s;
   animation-duration: 23s;
 }
@@ -130,7 +130,7 @@ body::after {
   height: 40vw;
   right: 14%;
   top: 16%;
-  background: radial-gradient(circle, rgba(0, 215, 196, 0.16), rgba(0, 215, 196, 0.045) 45%, rgba(0, 215, 196, 0) 72%);
+  background: radial-gradient(circle, rgba(var(--orb-c, 0, 215, 196), 0.16), rgba(var(--orb-c, 0, 215, 196), 0.045) 45%, rgba(var(--orb-c, 0, 215, 196), 0) 72%);
   opacity: 0.4;
   animation-delay: -12s;
   animation-duration: 27s;

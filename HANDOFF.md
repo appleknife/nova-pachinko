@@ -39,6 +39,7 @@ and HUD, `wheel.css` for the vault UI).
 - **Skillshot**: `predictLanding(ball)` runs a throwaway copy through `integrateMotion` — the same motion and collision code the real ball uses — for up to four seconds of flight, and returns the slot it would reach. `nudgeBoard` calls it **before and after** the impulse and sets `ball.skillshotAt` only when the knock flipped a non-jackpot prediction into the jackpot; anything else clears the claim. `captureBall` calls `showSkillshot()` from the jackpot branch if that ball still carries the flag. The ghost sets `ball.ghost`, which makes `resolvePin` skip its pin flash, bumper sound and sparks, and makes `registerPinHit` return immediately — without that, a prediction would play the game (it threw on `hitPegs` the first time). It also zeroes the pin jitter so the prediction is stable rather than noise. Measured 0.33 ms a sim, 1.4 ms worst. The headline is sized by `fitSkillshot()`: measure the word at 100 px, scale it to 94% of the cabinet, correct once, and do it again when the element is shown (a font swap after first layout otherwise leaves a stale size).
 - **Phone layout**: `.game-shell` is a two-row grid (`auto minmax(0,1fr)`) at `100dvh` below 861px, and `.stage` is **height-driven inside that row** — `height: min(100%, calc(100vw * 1.3947368))` with `aspect-ratio` supplying the width. That is what keeps the slot row on screen; the old rule sized the board from a hardcoded 330px HUD and overflowed once the HUD passed it.
 - **Relic detail**: a locked relic card used to be `disabled`, which made the one thing a player wants to know unclickable. It is now enabled with `.locked` styling and opens `#relicDetail`: all ten branch items, `✓` for owned, and either a `FORGE · 10 ◆` button or an `n/10 ◆` shard count for the missing ones. `forgeItem()` does the rest (shards, pair bonus, relic unlock); the panel re-renders after and closes itself when the set completes.
+- **Parlor cosmetics**: four skins for the room and the cabinet, bought with Dust — the second sink for it. `PARLOR` in `wheel.js` is the table (`nova` free, `dusk` 60 ◆, `mint` 120 ◆, `ember` 200 ◆); each entry carries `room` / `base` / `orbs` / `frame` / `marquee` palettes plus a three-colour `swatch` for its card. Ownership is `nova-pachinko-parlor-v1`, the active id `nova-pachinko-theme-v1` — both come along in the save file for free, because it exports every `nova-pachinko-*` key. `applyParlor(id)` dispatches `nova:theme` with the resolved palette and `game.js` answers with `applyParlorPalette()` (the board owns the room and the cabinet): it writes `--room-a/b/c`, `--room-top/mid/low` and `--orb-a/b/c` on `:root`, keeps `parlorPalette` for the canvas, and sets `layerScale = 0` — **the cabinet is baked into an offscreen layer, so a palette change that does not force that layer to rebuild leaves the frame in its old colours**. `drawCabinetBase()` reads `parlorPalette.frame` / `.marquee`, falling back to the shipped colours when none is set. The UI is the 2×2 card grid in the passport side column (`buildParlor` / `updateParlorUi` / `chooseParlor`); a card reads `ACTIVE` / `OWNED` / `N ◆`, and an owned one swaps back for free. The palettes deliberately exclude rarity and slot colours — a cosmetic that changes what a pull looks like is a readability bug, not a feature. **The init (`buildParlor()` + `applyParlor(activeParlor, false)`) is the last thing in `wheel.js`**, because the table and its saved state are declared below the main init block and calling it from there hits their TDZ. Reload persistence was verified end to end: with `theme=mint` seeded, a fresh load lands on `--room-a: rgba(60, 210, 190, 0.18)`, a `COLD STORAGE` ACTIVE card, and no console errors.
 - **Run contracts**: `contractOffers()` builds four goals from live state (jackpots, chain, a score target at 75% of your best floored to 25k, and one skillshot) and `refreshContract()` picks one by `state.contractRoll % 4`. The ↻ cycles only while `!state.started`. `checkContract()` runs from `updateHud` (met guard, so the toast and sting fire once) and `bankPot()` doubles the payout when `state.contract.met` — the doubling is on the whole pot, not the minted base, because that is the promise the strip makes. Nothing is charged for skipping it.
 - **Save file**: `collectSave()` exports every `localStorage` key under the `nova-pachinko-` prefix (so a setting added later is saved without touching the code) plus `app`/`version`/`savedAt`/`found`/`tokens` for the confirmation. `loadSaveFile()` refuses anything whose `app` is not `nova-pachinko-save`, clears the old nova keys first (a key that only existed in the old save must not survive), then writes only prefixed keys — a file cannot inject arbitrary storage into the origin — and reloads so both modules re-init. UI lives in the passport side column.
 - **Theme music**: `audio/theme.mp3`, 37.92 s @ 128 kbps (608 KB). Cut from the supplied Suno track at 9.576 s → 47.496 s: 76 BPM, bar 3.16 s, and that 12-bar window had the best phrase recurrence of any candidate (normalised envelope correlation 0.81 between the material at the start and at the cut). The wrap is clean — last sample ≈ first sample (jump 0.0002) after a 6 ms tail taper, plus a 40 Hz high-pass so small speakers do not rattle. It is a real `<audio loop>` element rather than base64: a minute of music is ~1 MB of base64 parsed at startup, which only works for the tiny bumper/heartbeat samples. Volume is `music × duck` — the music slider is **independent** of the SFX slider (they used to multiply, so pulling the effects down dragged the music down too) — ramped in `updateTheme(dt)` because a media element cannot ramp itself; `startCinemaBed` ducks to 0.3 and `stopCinemaBed` restores 1. Playback starts on the first pointerdown/keydown because autoplay needs a gesture.
@@ -60,26 +61,27 @@ protection rejects the push, which is exactly what happened the first time this
 note was written.
 3. Wait ~50 s, then verify Pages by comparing `git show HEAD:$f | tr -d '\r' | md5sum` with `curl -s https://appleknife.github.io/nova-pachinko/$f | tr -d '\r' | md5sum`.
 4. `cd desktop && powershell -NoProfile -ExecutionPolicy Bypass -File pack.ps1`
-5. Restart the desktop app: `powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\kopik\.lmstudio\scratchpads\dx\restart-nova.ps1` — it sometimes needs running twice before a new PID appears.
+5. Restart the desktop app: stop the chrome process running `--app=*nova-pachinko*`, then `Start-Process ...\desktop\NovaPachinko.cmd -WindowStyle Hidden`. (`restart-nova.ps1` went with the `dx` scratchpad; this is what replaced it.)
 
 **Rollback**: tag `stable-2026-10-28` is a known-good build; every update since is one commit, so `git revert <sha>` undoes a single feature.
 
-## Testing harnesses (scratchpad `C:\Users\kopik\.lmstudio\scratchpads\dx\`)
+## Testing harnesses (scratchpad `C:\Users\kopik\.lmstudio\scratchpads\vo\probe\`)
 
-**The `dx` scratchpad is gone** (only a stray `dx$p` Chrome profile survives), so
-`inject.ps1`, `inline2.ps1`, `stress2.ps1`, `listen.ps1` and `restart-nova.ps1`
-all need rebuilding. A minimal replacement used for the batch work: copy the
-five source files into a folder, append `seed.js` (clears localStorage, writes a
-token count, installs an error collector) and `probe.js` (drives the DOM, beacons
-results to `http://127.0.0.1:8099/`), with a PowerShell `HttpListener` in front
-of it and `--headless=new` Chrome. Use `--virtual-time-budget` only for logic
-that a click can force through `skipSpin()`; it freezes the real animation loop,
-so motion tests need the beacon and real time.
+**The `dx` scratchpad is gone** with everything that lived in it. The current
+harness is `scratchpads\vo\probe`: copies of the five source files plus
+`seed.js` (clears localStorage, writes the state a test needs, installs an error
+collector) and `probe.js` (drives the DOM, beacons JSON to
+`http://127.0.0.1:8099/`), with a PowerShell `HttpListener` in front of it and
+`--headless=new` Chrome. `run.ps1` is desktop, `run-phone.ps1` is 390×844,
+`run-wide.ps1` is 1600×1000. **Order matters: `seed.js` must be injected before
+`game.js`/`wheel.js`**, or it writes the state the modules have already read.
+Use `--virtual-time-budget` only for logic that a click can force through
+`skipSpin()`; it freezes the real animation loop, so motion tests need the
+beacon and real time. Per-feature probes get their own folder under
+`scratchpads\vo\` (e.g. `vo\parlor2` for the reload-persistence check).
 
-- `inject.ps1` copies the game into a folder and injects a harness. **Its `-Extra` parameter works** (a PowerShell case-insensitivity bug used to swallow it — fixed).
-- `inline2.ps1` inlines both scripts into one page so uncaught errors are reported with real line numbers instead of `Script error.`
-- `stress2.ps1` + `listen.ps1`: the only way to test the **real** animation loop. The page beacons its results to `http://127.0.0.1:8099/`; run `listen.ps1` first, then launch Chrome **without** `--virtual-time-budget`.
-- `reportprobe.ps1`, `deckprobe.ps1`, `autopick.ps1`, `tradeprobe.ps1`: expose `window.__nova` / `window.__wt` and drive specific features.
+- If `run.ps1` finishes with no `result.txt` at all, it threw before the beacon wait — run the equivalent script with `Write-Host` lines before assuming the page is broken. (The first `vo\parlor2` run did exactly that and passed on a plain re-run.)
+- Expose `window.__nova` (game) / `window.__wt` (wheel) from the probe when a check needs internals rather than DOM text.
 
 ### Harness limits (learned the hard way)
 
@@ -105,6 +107,6 @@ so motion tests need the beacon and real time.
 ## Open ideas (not built)
 
 - Ball deck: queue one ball per sweep slot (first drop bouncy, second heavy).
-- Nova Rank (opt-in prestige), parlor cosmetics (Dust sink), daily seeded board, achievements.
+- Nova Rank (opt-in prestige), daily seeded board, achievements.
 - Mythic floor: a guaranteed mythic after N spins without one (the trade-up already removes the hard lockout).
 - Animals as constellations would need more stars per branch (14-18), i.e. a change to how many items a branch holds.

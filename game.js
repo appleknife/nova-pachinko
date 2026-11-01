@@ -358,6 +358,8 @@
   // The offset currently written to the canvas, so the frame loop only touches
   // the style when it actually moved.
   let appliedShake = "";
+  // Set by a `nova:theme` event from wheel.js, then read by drawCabinetBase.
+  let parlorPalette = null;
   let nudgeUiLive = null;
   let playMode = false;
   let glassOverlayLayer = null;
@@ -798,6 +800,12 @@
 
     window.addEventListener("nova:loadoutchange", (event) => {
       applyLoadoutBonuses(event.detail);
+    });
+
+    // The parlor lives in wheel.js (it owns the save and the shop); the board
+    // owns the room and the cabinet, so the palette arrives as an event.
+    window.addEventListener("nova:theme", (event) => {
+      applyParlorPalette(event.detail);
     });
 
     // A gesture is what lets the browser start audio; the theme waits for the
@@ -3067,12 +3075,17 @@
   function drawCabinetBase() {
     ctx.save();
 
+    // The frame and plaque colours come from the parlor theme when one is set,
+    // and from the shipped palette otherwise.
+    const frameColors =
+      (parlorPalette && parlorPalette.frame) || ["#292a4b", "#15182c", "#0b0e1b", "#24213b"];
+
     roundPath(FRAME.x, FRAME.y, FRAME.w, FRAME.h, FRAME.r);
     const frameGradient = ctx.createLinearGradient(20, 20, 740, 1040);
-    frameGradient.addColorStop(0, "#292a4b");
-    frameGradient.addColorStop(0.28, "#15182c");
-    frameGradient.addColorStop(0.6, "#0b0e1b");
-    frameGradient.addColorStop(1, "#24213b");
+    frameGradient.addColorStop(0, frameColors[0]);
+    frameGradient.addColorStop(0.28, frameColors[1]);
+    frameGradient.addColorStop(0.6, frameColors[2]);
+    frameGradient.addColorStop(1, frameColors[3]);
     ctx.fillStyle = frameGradient;
     ctx.fill();
 
@@ -3087,9 +3100,11 @@
 
     // Marquee plaque.
     roundPath(42, 17, 676, 49, 15);
+    const marqueeColors =
+      (parlorPalette && parlorPalette.marquee) || ["#1b1a34", "#0a0d1c"];
     const marquee = ctx.createLinearGradient(0, 18, 0, 66);
-    marquee.addColorStop(0, "#1b1a34");
-    marquee.addColorStop(1, "#0a0d1c");
+    marquee.addColorStop(0, marqueeColors[0]);
+    marquee.addColorStop(1, marqueeColors[1]);
     ctx.fillStyle = marquee;
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 218, 157, 0.16)";
@@ -5651,6 +5666,39 @@
   // 1 is full, 0.35 is "something else is talking" — the cinema bed uses it.
   function duckTheme(amount) {
     themeDuck = clamp(amount, 0, 1);
+  }
+
+  // The parlor palette arrives from wheel.js as plain colours: the room's three
+  // glows, its base gradient, the ambient orbs, and the cabinet frame + plaque.
+  // Rarity and slot colours are deliberately not in here — a skin must never
+  // change how the board reads.
+  function applyParlorPalette(palette) {
+    if (!palette) return;
+    parlorPalette = palette;
+
+    const root = document.documentElement;
+    const set = (name, value) => {
+      if (typeof value === "string") root.style.setProperty(name, value);
+    };
+
+    if (Array.isArray(palette.room)) {
+      set("--room-a", palette.room[0]);
+      set("--room-b", palette.room[1]);
+      set("--room-c", palette.room[2]);
+    }
+    if (Array.isArray(palette.base)) {
+      set("--room-top", palette.base[0]);
+      set("--room-mid", palette.base[1]);
+      set("--room-low", palette.base[2]);
+    }
+    if (Array.isArray(palette.orbs)) {
+      set("--orb-a", palette.orbs[0]);
+      set("--orb-b", palette.orbs[1]);
+      set("--orb-c", palette.orbs[2]);
+    }
+
+    // The cabinet is baked into an offscreen layer, so it has to be rebuilt.
+    layerScale = 0;
   }
 
   function toggleSound() {

@@ -164,6 +164,23 @@ spin (one tap and the receipt appears).
 The SKIP pill is still there. Nobody reaches for a pill when the thing they are
 watching is under their finger.
 
+### New: parlor cosmetics
+
+Dust had one sink — forging. It has a second one now: **the room**.
+
+**PASSPORT · PARLOR** carries four skins for the cabinet and the room behind it:
+**NOVA STANDARD** (yours already), **NEON DUSK** (60 ◆), **COLD STORAGE**
+(120 ◆) and **EMBER PARLOR** (200 ◆). Buying one applies it immediately and
+remembers it; an owned one swaps back for free, as often as you like, so the
+themes are a wardrobe rather than a one-way upgrade.
+
+A theme repaints the cabinet's frame and nameplate, the light falling through the
+room and the three ambient orbs behind the glass. It **never** touches a rarity
+colour, a slot colour or a payout — a cosmetic that changes what a pull looks
+like is a readability bug wearing a hat.
+
+It travels in the save file and survives a reload like every other setting.
+
 ---
 
 ## Batch spins and the receipt (live earlier today)
