@@ -527,6 +527,9 @@
     copyCodeBtn2: document.getElementById("copyCodeBtn2"),
     friendCode: document.getElementById("friendCode"),
     compareBtn: document.getElementById("compareBtn"),
+    saveFileBtn: document.getElementById("saveFileBtn"),
+    loadFileBtn: document.getElementById("loadFileBtn"),
+    loadFileInput: document.getElementById("loadFileInput"),
     compareResult: document.getElementById("compareResult"),
     vaultProgress: document.getElementById("vaultProgress"),
     vaultFound: document.getElementById("vaultFound"),
@@ -2811,6 +2814,105 @@
     );
   }
 
+  // ---- Save file ------------------------------------------------------------
+  // The cabinet already saves itself to localStorage on every change; this is the
+  // other half of the job — a file that carries that state to another browser,
+  // another device, or a friend. Every key under the `nova-pachinko-` prefix goes
+  // in, so a setting added later is saved without touching this code.
+  const SAVE_PREFIX = "nova-pachinko-";
+  const SAVE_APP = "nova-pachinko-save";
+
+  function novaKeys() {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.indexOf(SAVE_PREFIX) === 0) keys.push(key);
+    }
+    return keys;
+  }
+
+  function collectSave() {
+    const keys = {};
+    for (const key of novaKeys()) keys[key] = localStorage.getItem(key) || "";
+    return {
+      app: SAVE_APP,
+      version: 1,
+      savedAt: new Date().toISOString(),
+      found: countFoundItems(),
+      tokens,
+      keys
+    };
+  }
+
+  function downloadSave() {
+    let payload;
+    try {
+      payload = JSON.stringify(collectSave(), null, 2);
+    } catch {
+      showToast("COULD NOT WRITE THE SAVE", "");
+      return;
+    }
+
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    anchor.href = url;
+    anchor.download = `nova-pachinko-save-${stamp}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast(`SAVE DOWNLOADED · ${countFoundItems()} / ${TOTAL_ITEMS} VAULT`, "gold");
+  }
+
+  function readFileText(file) {
+    if (typeof file.text === "function") return file.text();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  }
+
+  async function loadSaveFile(file) {
+    let data = null;
+    try {
+      data = JSON.parse(await readFileText(file));
+    } catch {
+      data = null;
+    }
+
+    if (!data || data.app !== SAVE_APP || !data.keys || typeof data.keys !== "object") {
+      showToast("THAT FILE IS NOT A NOVA SAVE", "");
+      return;
+    }
+
+    const found = Number.isFinite(data.found) ? data.found : "?";
+    const tokenCount = Number.isFinite(data.tokens) ? data.tokens : "?";
+    const when = data.savedAt ? String(data.savedAt).slice(0, 10) : "an unknown date";
+    const ok = window.confirm(
+      `Load this Nova save?\n\n${found} vault pieces · ${tokenCount} tokens\nSaved ${when}\n\nEverything in this cabinet will be replaced.`
+    );
+    if (!ok) return;
+
+    // Clear first: a key that only exists in the old save must not survive
+    // alongside the new one. Then write only nova keys — a file cannot drop
+    // arbitrary entries into this origin's storage.
+    for (const key of novaKeys()) localStorage.removeItem(key);
+    for (const [key, value] of Object.entries(data.keys)) {
+      if (key.indexOf(SAVE_PREFIX) !== 0) continue;
+      try {
+        localStorage.setItem(key, String(value));
+      } catch {
+        // A full or locked store; the rest of the save still lands.
+      }
+    }
+
+    showToast("SAVE LOADED · RESTARTING", "gold");
+    window.setTimeout(() => window.location.reload(), 800);
+  }
+
   function bindEvents() {
     el.tokenBtn.addEventListener("click", () => {
       openWheel();
@@ -2944,6 +3046,16 @@
     el.copyCodeBtn.addEventListener("click", copyCollectionCode);
     el.copyCodeBtn2.addEventListener("click", copyCollectionCode);
     el.compareBtn.addEventListener("click", compareFriendVault);
+
+    if (el.saveFileBtn) el.saveFileBtn.addEventListener("click", downloadSave);
+    if (el.loadFileBtn && el.loadFileInput) {
+      el.loadFileBtn.addEventListener("click", () => el.loadFileInput.click());
+      el.loadFileInput.addEventListener("change", () => {
+        const file = el.loadFileInput.files && el.loadFileInput.files[0];
+        el.loadFileInput.value = "";
+        if (file) loadSaveFile(file);
+      });
+    }
 
     el.wheelMode.addEventListener("click", (event) => {
       if (event.target === el.wheelMode) closeWheel();

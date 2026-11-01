@@ -96,6 +96,14 @@ A friend's report: the slot row disappeared. The cause was ours — the phone la
 - The mobile toast moved to the top edge, because at the bottom it was covering the slot labels it was meant to be read above.
 - **FULL** now labels itself like AUTO and HIGH (glyph over a 6px caption) instead of spilling out of its 36px cell.
 
+### New: save file
+
+The cabinet already saved itself — every token, pull and setting is written the moment it changes. What was missing was a way to **carry** that save.
+
+The Passport now has **DOWNLOAD SAVE** and **LOAD SAVE**: a small JSON file with the whole cabinet in it (tokens, vault, shards, dust, relics, showcase, best score, and every setting), which is how a save moves between the desktop app and the hosted build — they are different origins, so they have never shared storage.
+
+Loading says what is in the file first (`63 vault pieces · 72 tokens · saved 2026-11-01`), replaces the cabinet rather than merging, and refuses anything that is not a Nova save.
+
 ### Fixed: the FULL button did nothing on desktop
 
 `display: none` for wide screens was in a media query near the top of the file, and a plain `.play-btn` rule added later overrode it — so desktop kept a FULL button while the mode itself refuses to run above 860px. It is hidden on desktop again, and a window that grows past the breakpoint now drops out of play mode by itself, since the way back out would be gone.
