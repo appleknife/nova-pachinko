@@ -61,7 +61,7 @@ protection rejects the push, which is exactly what happened the first time this
 note was written.
 3. Wait ~50 s, then verify Pages by comparing `git show HEAD:$f | tr -d '\r' | md5sum` with `curl -s https://appleknife.github.io/nova-pachinko/$f | tr -d '\r' | md5sum`.
 4. `cd desktop && powershell -NoProfile -ExecutionPolicy Bypass -File pack.ps1`
-5. Restart the desktop app: stop the chrome process running `--app=*nova-pachinko*`, then `Start-Process ...\desktop\NovaPachinko.cmd -WindowStyle Hidden`. (`restart-nova.ps1` went with the `dx` scratchpad; this is what replaced it.)
+5. Restart the desktop app: `cd desktop && powershell -NoProfile -ExecutionPolicy Bypass -File restart.ps1` — it stops the `--app=*nova-pachinko*` chrome process, relaunches `NovaPachinko.cmd` hidden, and prints the old and new PID so you can see it worked. (This replaced the lost `restart-nova.ps1`.)
 
 **Rollback**: tag `stable-2026-10-28` is a known-good build; every update since is one commit, so `git revert <sha>` undoes a single feature.
 
